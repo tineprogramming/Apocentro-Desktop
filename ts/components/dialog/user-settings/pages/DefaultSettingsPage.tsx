@@ -12,7 +12,6 @@ import {
   updateDeleteAccountModal,
   UserSettingsModalState,
 } from '../../../../state/ducks/modalDialog';
-import { networkDataActions } from '../../../../state/ducks/networkData';
 import { sectionActions } from '../../../../state/ducks/section';
 import { AccountIdPill } from '../../../basic/AccountIdPill';
 import { Flex } from '../../../basic/Flex';
@@ -121,16 +120,6 @@ function MiscSection() {
           dispatch(onionPathModal({}));
         }}
         dataTestId="path-light-container"
-      />
-      <PanelIconButton
-        iconElement={<SessionIconForSettings iconType="sessionToken" />}
-        text={{ token: 'networkName' }}
-        onClick={() => {
-          // do a refresh request on open
-          dispatch(networkDataActions.refreshInfoFromSeshServer() as any);
-          dispatch(userSettingsModal({ userSettingsPage: 'network' }));
-        }}
-        dataTestId="session-network-settings-menu-item"
       />
     </PanelButtonGroup>
   );
