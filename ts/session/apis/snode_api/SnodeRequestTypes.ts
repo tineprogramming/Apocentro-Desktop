@@ -4,6 +4,7 @@ import { from_hex } from 'libsodium-wrappers-sumo';
 import { isEmpty, isString } from 'lodash';
 import { AwaitedReturn, assertUnreachable } from '../../../types/sqlSharedTypes';
 import { concatUInt8Array } from '../../crypto';
+import { wrapWithMagicBytes } from '../../crypto/MagicBytes';
 import { PubKey } from '../../types';
 import { StringUtils, UserUtils } from '../../utils';
 import { ed25519Str } from '../../utils/String';
@@ -1000,7 +1001,14 @@ abstract class StoreGroupConfigSubRequest<
     method: 'store';
     params: StoreOnNodeNormalParams;
   }> {
-    const encryptedDataBase64 = ByteBuffer.wrap(this.encryptedData).toString('base64');
+    // Apocentro: prefix every group config payload (info/members/keys/revoked)
+    // with our magic bytes — same as chat messages — so only other Apocentro
+    // clients can decode it. This matches iOS, which wraps at the single
+    // transport boundary for ALL payload types (chat + config). swarmPolling
+    // strips it back off leniently on receive.
+    const encryptedDataBase64 = ByteBuffer.wrap(wrapWithMagicBytes(this.encryptedData)).toString(
+      'base64'
+    );
 
     // this will either sign with our admin key or with the sub account key if the admin one isn't there
     const signDetails = await SnodeGroupSignature.getSnodeGroupSignature({
@@ -1105,7 +1113,13 @@ export class StoreUserConfigSubRequest extends StoreSubRequest {
     method: 'store';
     params: StoreOnNodeNormalParams;
   }> {
-    const encryptedDataBase64 = ByteBuffer.wrap(this.encryptedData).toString('base64');
+    // Apocentro: prefix the user config payload (profile/contacts/convo-info/
+    // user-groups) with our magic bytes, matching iOS and the chat path, so
+    // configs stay inside the closed ecosystem. swarmPolling strips it back off
+    // leniently on receive.
+    const encryptedDataBase64 = ByteBuffer.wrap(wrapWithMagicBytes(this.encryptedData)).toString(
+      'base64'
+    );
     const ourPrivKey = (await UserUtils.getUserED25519KeyPairBytes())?.privKeyBytes;
     if (!ourPrivKey) {
       throw new Error('getUserED25519KeyPairBytes is empty');

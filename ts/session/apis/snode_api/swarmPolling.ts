@@ -26,7 +26,7 @@ import {
 import { DURATION, SWARM_POLLING_TIMEOUT } from '../../constants';
 import { ConvoHub } from '../../conversations';
 import { getSodiumRenderer } from '../../crypto';
-import { hasMagicBytes, stripMagicBytes } from '../../crypto/MagicBytes';
+import { hasMagicBytes, stripMagicBytes, stripMagicBytesIfPresent } from '../../crypto/MagicBytes';
 import { StringUtils, UserUtils } from '../../utils';
 import { sleepFor } from '../../utils/Promise';
 import { ed25519Str, fromBase64ToArray, fromHexToArray } from '../../utils/String';
@@ -422,7 +422,10 @@ export class SwarmPolling {
       for (let index = 0; index < revokedMessages.length; index++) {
         const revokedMessage = revokedMessages[index];
         const successWith = await MultiEncryptUtils.multiDecryptAnyEncryptionDomain({
-          encoded: fromBase64ToArray(revokedMessage.data),
+          // Apocentro: revoked-retrievable messages are a group config namespace,
+          // so they are magic-byte wrapped on send like the rest. Strip leniently
+          // before decrypting.
+          encoded: stripMagicBytesIfPresent(fromBase64ToArray(revokedMessage.data)),
           userEd25519SecretKey,
           senderEd25519Pubkey,
         });

@@ -46,3 +46,13 @@ export function hasMagicBytes(data: Uint8Array): boolean {
 export function stripMagicBytes(data: Uint8Array): Uint8Array {
   return data.subarray(MAGIC_BYTES.length);
 }
+
+/**
+ * Lenient strip: remove the prefix when present, otherwise return the payload
+ * unchanged. Used on the config-receive path so iOS/Android-wrapped configs are
+ * unwrapped while un-prefixed (e.g. legacy / other-origin) configs still merge.
+ * Mirrors iOS's lenient `unwrapMagicBytes`.
+ */
+export function stripMagicBytesIfPresent(data: Uint8Array): Uint8Array {
+  return hasMagicBytes(data) ? stripMagicBytes(data) : data;
+}

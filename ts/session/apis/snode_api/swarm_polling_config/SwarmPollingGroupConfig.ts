@@ -9,6 +9,7 @@ import {
   UserGroupsWrapperActions,
 } from '../../../../webworker/workers/browser/libsession_worker_interface';
 import { ed25519Str, fromBase64ToArray, toHex } from '../../../utils/String';
+import { stripMagicBytesIfPresent } from '../../../crypto/MagicBytes';
 import { GroupPendingRemovals } from '../../../utils/job_runners/jobs/GroupPendingRemovalsJob';
 import { LibSessionUtil } from '../../../utils/libsession/libsession_utils';
 import { SnodeNamespaces } from '../namespaces';
@@ -209,21 +210,26 @@ async function handleGroupSharedConfigMessages(
     if (groupConfigMessages.find(m => !m.storedAt)) {
       throw new Error('all incoming group config message should have a timestamp');
     }
+    // Apocentro: strip our magic-byte prefix (lenient) before merging into
+    // libsession. iOS/Android wrap group config (info/members/keys) the same way
+    // they wrap chat; libsession can only parse the bare bencoded config dict, so
+    // a leftover prefix throws "Cannot create a bt_dict_consumer with non-dict
+    // data" and the group never initializes.
     const infos = groupConfigMessages
       .filter(m => m.namespace === SnodeNamespaces.ClosedGroupInfo)
       .map(info => {
-        return { data: fromBase64ToArray(info.data), hash: info.hash };
+        return { data: stripMagicBytesIfPresent(fromBase64ToArray(info.data)), hash: info.hash };
       });
     const members = groupConfigMessages
       .filter(m => m.namespace === SnodeNamespaces.ClosedGroupMembers)
       .map(info => {
-        return { data: fromBase64ToArray(info.data), hash: info.hash };
+        return { data: stripMagicBytesIfPresent(fromBase64ToArray(info.data)), hash: info.hash };
       });
     const keys = groupConfigMessages
       .filter(m => m.namespace === SnodeNamespaces.ClosedGroupKeys)
       .map(info => {
         return {
-          data: fromBase64ToArray(info.data),
+          data: stripMagicBytesIfPresent(fromBase64ToArray(info.data)),
           hash: info.hash,
           timestampMs: info.storedAt,
         };

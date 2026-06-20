@@ -12,6 +12,7 @@ import { ConvoHub } from '../session/conversations';
 import { ProfileManager } from '../session/profile_manager/ProfileManager';
 import { PubKey } from '../session/types';
 import { StringUtils, UserUtils } from '../session/utils';
+import { stripMagicBytesIfPresent } from '../session/crypto/MagicBytes';
 import { FetchMsgExpirySwarm } from '../session/utils/job_runners/jobs/FetchMsgExpirySwarmJob';
 import { LibSessionUtil } from '../session/utils/libsession/libsession_utils';
 import { SessionUtilContact } from '../session/utils/libsession/libsession_utils_contacts';
@@ -127,7 +128,10 @@ async function mergeUserConfigsWithIncomingUpdates(
         continue;
       }
       const toMerge = sameVariant.map(msg => ({
-        data: StringUtils.fromBase64ToArray(msg.data),
+        // Apocentro: strip our magic-byte prefix (lenient) before handing the
+        // blob to libsession — iOS/Android wrap user configs the same way chat
+        // is wrapped, and libsession can only parse the bare config dict.
+        data: stripMagicBytesIfPresent(StringUtils.fromBase64ToArray(msg.data)),
         hash: msg.hash,
       }));
 

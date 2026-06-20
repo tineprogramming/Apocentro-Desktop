@@ -41,7 +41,14 @@ MAGIC_BYTES = [0x41, 0x50, 0x43, 0x01]   // "APC" + version 1
   *before* base64 for the network.
 - **On receive:** check the prefix; **strip it** before decrypting; **silently
   drop** anything without it (that's a non‑Apocentro / Session message).
-- **Config‑namespace traffic is intentionally left UNWRAPPED** (matches Android).
+- **Config‑namespace traffic on desktop is now WRAPPED too** (user + group
+  config: profile/contacts/convo‑info/user‑groups + group info/members/keys/
+  revoked), matching iOS. Stripping on the config‑receive path is **lenient**
+  (strip‑if‑present, pass‑through otherwise) so un‑prefixed configs still merge
+  during the transition. ⚠️ **Android still leaves configs unwrapped/​unstripped**
+  — until it ships the same fix (see `magic-bytes-group-config-issue.md` in
+  session‑ios), desktop→Android **config** sync will break, even though
+  desktop↔iOS now works. Web has not been touched yet either.
 
 **This must stay byte‑for‑byte identical across web, android, and desktop.**
 Reference implementations:
@@ -73,9 +80,16 @@ Reference implementations:
 - Add the magic-bytes closed-ecosystem layer
 
 ### Key files (desktop)
-- `ts/session/crypto/MagicBytes.ts` — the protocol layer
-- `ts/session/sending/MessageWrapper.ts` — wraps on send (1o1 + group)
-- `ts/session/apis/snode_api/swarmPolling.ts` — `apocentroStripMagicBytes()` on receive
+- `ts/session/crypto/MagicBytes.ts` — the protocol layer (`wrapWithMagicBytes` /
+  `hasMagicBytes` / `stripMagicBytes` / `stripMagicBytesIfPresent` lenient strip)
+- `ts/session/sending/MessageWrapper.ts` — wraps **chat** on send (1o1 + group)
+- `ts/session/apis/snode_api/SnodeRequestTypes.ts` — wraps **config** on send
+  (`StoreUserConfigSubRequest` + `StoreGroupConfigSubRequest` build())
+- `ts/session/apis/snode_api/swarmPolling.ts` — `apocentroStripMagicBytes()` strips
+  **chat** on receive; `handleRevokedMessages` strips revoked config leniently
+- `ts/receiver/configMessage.ts` — strips **user config** leniently on receive
+- `ts/session/apis/snode_api/swarm_polling_config/SwarmPollingGroupConfig.ts` —
+  strips **group config** (info/members/keys) leniently on receive
 - `ts/localization/localeTools.ts` — `applyApocentroBrand()` inside
   `LocalizedStringBuilder.toString()` replaces the brand name for ALL strings/locales
 - `package.json` build config (appId, mac/win, repository → this fork)
