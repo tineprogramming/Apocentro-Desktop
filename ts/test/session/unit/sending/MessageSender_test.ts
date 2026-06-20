@@ -210,7 +210,10 @@ describe('MessageSender', () => {
         // Apocentro: the snode-bound payload is prefixed with the magic bytes,
         // so strip them before decoding the (otherwise standard) envelope.
         const body = webSocketMessage.request?.body as Uint8Array;
-        expect(hasMagicBytes(body)).to.equal(true, 'payload should carry the Apocentro magic bytes');
+        expect(hasMagicBytes(body)).to.equal(
+          true,
+          'payload should carry the Apocentro magic bytes'
+        );
         const envelope = SignalService.Envelope.decode(stripMagicBytes(body));
         expect(envelope.source).to.equal('');
 
