@@ -12,6 +12,7 @@ import { ConvoHub } from '../../../../session/conversations/ConversationControll
 import { OnionSending } from '../../../../session/onions/onionSend';
 import { OnionV4 } from '../../../../session/onions/onionv4';
 import { MessageSender } from '../../../../session/sending';
+import { hasMagicBytes, stripMagicBytes } from '../../../../session/crypto/MagicBytes';
 import { OutgoingRawMessage } from '../../../../session/types';
 import { MessageUtils, UserUtils } from '../../../../session/utils';
 import { fromBase64ToArrayBuffer } from '../../../../session/utils/String';
@@ -206,9 +207,11 @@ describe('MessageSender', () => {
           'Request body should not be null'
         );
 
-        const envelope = SignalService.Envelope.decode(
-          webSocketMessage.request?.body as Uint8Array
-        );
+        // Apocentro: the snode-bound payload is prefixed with the magic bytes,
+        // so strip them before decoding the (otherwise standard) envelope.
+        const body = webSocketMessage.request?.body as Uint8Array;
+        expect(hasMagicBytes(body)).to.equal(true, 'payload should carry the Apocentro magic bytes');
+        const envelope = SignalService.Envelope.decode(stripMagicBytes(body));
         expect(envelope.source).to.equal('');
 
         // the timestamp in the message is not overridden on sending as it should be set with the network offset when created.
