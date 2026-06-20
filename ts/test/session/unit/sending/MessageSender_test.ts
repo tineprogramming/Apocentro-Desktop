@@ -196,8 +196,17 @@ describe('MessageSender', () => {
         if (firstSubRequest.method !== 'store') {
           throw new Error('expected a store request with data');
         }
-        const data = fromBase64ToArrayBuffer(firstSubRequest.params.data);
-        const webSocketMessage = SignalService.WebSocketMessage.decode(new Uint8Array(data));
+        // Apocentro: the whole snode-bound payload is prefixed with our magic
+        // bytes (MessageWrapper wraps the encrypted blob), so strip them before
+        // decoding the standard Session WebSocketMessage/Envelope — the same way
+        // swarmPolling does on the receive side.
+        const rawData = new Uint8Array(fromBase64ToArrayBuffer(firstSubRequest.params.data));
+        expect(hasMagicBytes(rawData)).to.equal(
+          true,
+          'payload should carry the Apocentro magic bytes'
+        );
+        const data = stripMagicBytes(rawData);
+        const webSocketMessage = SignalService.WebSocketMessage.decode(data);
         expect(webSocketMessage.request?.body).to.not.equal(
           undefined,
           'Request body should not be undefined'
@@ -207,14 +216,9 @@ describe('MessageSender', () => {
           'Request body should not be null'
         );
 
-        // Apocentro: the snode-bound payload is prefixed with the magic bytes,
-        // so strip them before decoding the (otherwise standard) envelope.
-        const body = webSocketMessage.request?.body as Uint8Array;
-        expect(hasMagicBytes(body)).to.equal(
-          true,
-          'payload should carry the Apocentro magic bytes'
+        const envelope = SignalService.Envelope.decode(
+          webSocketMessage.request?.body as Uint8Array
         );
-        const envelope = SignalService.Envelope.decode(stripMagicBytes(body));
         expect(envelope.source).to.equal('');
 
         // the timestamp in the message is not overridden on sending as it should be set with the network offset when created.
