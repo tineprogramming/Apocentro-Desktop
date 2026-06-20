@@ -135,6 +135,19 @@ export function PrivacySettingsPage(modalState: UserSettingsModalState) {
       }
       onClose={closeAction || undefined}
     >
+      <PanelLabelWithDescription title={{ token: 'permissionsMicrophone' }} />
+      <PanelButtonGroup>
+        <SettingsToggleBasic
+          baseDataTestId="enable-microphone"
+          active={Boolean(window.getSettingValue('media-permissions'))}
+          onClick={async () => {
+            await window.toggleMediaPermissions();
+            forceUpdate();
+          }}
+          text={{ token: 'permissionsMicrophone' }}
+          subText={{ token: 'permissionsMicrophoneDescriptionIos' }}
+        />
+      </PanelButtonGroup>
       <PanelLabelWithDescription title={{ token: 'sessionMessageRequests' }} />
       <PanelButtonGroup>
         <SettingsToggleBasic
