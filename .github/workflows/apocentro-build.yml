@@ -1,0 +1,128 @@
+name: Apocentro Build
+
+# Builds unsigned Apocentro desktop installers and uploads them as workflow
+# artifacts. No code signing, notarization, or publishing is done here — this
+# just produces runnable binaries you can download from the run's "Artifacts".
+#
+# - Linux:   AppImage (run directly, no install) + .deb
+# - Windows: NSIS installer (.exe)
+# - macOS:   .dmg (unsigned, best-effort — may need certs; continue-on-error)
+#
+# Trigger it from the Actions tab ("Run workflow") or it runs on push to the
+# Apocentro working branch.
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - claude/apocentro-web-recovery-q13fec
+
+concurrency:
+  group: apocentro-build-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux:
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        electron_target: [AppImage, deb]
+    name: "linux ${{ matrix.electron_target }}"
+    env:
+      USE_HARD_LINKS: false # https://github.com/electron-userland/electron-builder/issues/7093
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup
+        uses: ./actions/setup
+        with:
+          cache_suffix: linux_x64
+
+      - name: Enforce static builds for libsession-util-nodejs
+        uses: ./actions/enforce_static_builds
+
+      - name: Build
+        run: pnpm run build
+
+      - name: Make unsigned release build (${{ matrix.electron_target }})
+        run: |
+          sed -i 's/"target": "deb"/"target": "${{ matrix.electron_target }}"/g' package.json
+          pnpm run build-release
+
+      - name: Upload installer
+        uses: ./actions/upload_prod_artefacts
+        with:
+          upload_prefix: linux-${{ matrix.electron_target }}
+
+  windows:
+    runs-on: windows-2022
+    timeout-minutes: 40
+    name: "windows x64"
+    steps:
+      - run: git config --global core.autocrlf false
+      - run: git config --global core.eol lf
+
+      - name: Add msbuild to PATH
+        uses: microsoft/setup-msbuild@v2
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup
+        uses: ./actions/setup
+        with:
+          cache_suffix: windows_x64
+
+      - name: Build
+        run: pnpm run build
+
+      - name: Make unsigned release build
+        run: pnpm run build-release
+
+      - name: Upload installer
+        uses: ./actions/upload_prod_artefacts
+        with:
+          upload_prefix: windows-x64
+
+  mac:
+    runs-on: macos-14
+    timeout-minutes: 40
+    name: "mac arm64 (unsigned)"
+    # Unsigned mac builds can fail depending on the signing/notarize hooks, so
+    # don't let it block the Linux/Windows artifacts.
+    continue-on-error: true
+    steps:
+      - run: git config --global core.autocrlf false
+
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Setup
+        uses: ./actions/setup
+        with:
+          cache_suffix: mac-arm64
+
+      - name: Enforce static builds for libsession-util-nodejs
+        uses: ./actions/enforce_static_builds
+
+      - name: Build
+        run: pnpm run build
+
+      - name: Make unsigned release build
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: false # don't try to sign
+        run: pnpm run build-release
+
+      - name: Upload installer
+        uses: ./actions/upload_prod_artefacts
+        with:
+          upload_prefix: mac-arm64
