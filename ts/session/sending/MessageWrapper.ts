@@ -2,6 +2,7 @@ import {
   MetaGroupWrapperActions,
   MultiEncryptWrapperActions,
 } from '../../webworker/workers/browser/libsession_worker_interface';
+import { wrapWithMagicBytes } from '../crypto/MagicBytes';
 import { PubKey } from '../types';
 import { UserUtils } from '../utils';
 
@@ -59,7 +60,9 @@ async function encryptForGroup(
 
   return {
     networkTimestamp,
-    encryptedAndWrappedData: cipherText.encryptedData[0],
+    // Apocentro: prefix the snode-bound payload with our magic bytes so only
+    // other Apocentro clients (web + Android) can decode it.
+    encryptedAndWrappedData: wrapWithMagicBytes(cipherText.encryptedData[0]),
     namespace,
     ttl,
     dbMessageIdentifier,
@@ -100,7 +103,9 @@ async function encryptMessageAndWrap(
   ]);
 
   return {
-    encryptedAndWrappedData: encryptedAndWrappedData.encryptedData[0],
+    // Apocentro: prefix the snode-bound payload with our magic bytes so only
+    // other Apocentro clients (web + Android) can decode it.
+    encryptedAndWrappedData: wrapWithMagicBytes(encryptedAndWrappedData.encryptedData[0]),
     networkTimestamp,
     namespace,
     ttl,

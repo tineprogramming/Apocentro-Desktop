@@ -26,6 +26,7 @@ import {
 import { DURATION, SWARM_POLLING_TIMEOUT } from '../../constants';
 import { ConvoHub } from '../../conversations';
 import { getSodiumRenderer } from '../../crypto';
+import { hasMagicBytes, stripMagicBytes } from '../../crypto/MagicBytes';
 import { StringUtils, UserUtils } from '../../utils';
 import { sleepFor } from '../../utils/Promise';
 import { ed25519Str, fromBase64ToArray, fromHexToArray } from '../../utils/String';
@@ -58,6 +59,28 @@ import { isTestIntegration } from '../../../shared/env_vars';
 import { uuidV4 } from '../../../util/uuid';
 
 const minMsgCountShouldRetry = 95;
+
+/**
+ * Apocentro: turn raw swarm messages into libsession decrypt inputs, dropping
+ * anything that isn't wrapped with our magic bytes (i.e. non-Apocentro traffic)
+ * and stripping the prefix off the ones that are. Messages dropped here are
+ * never decrypted, so handleDecryptedMessagesForSwarm marks them seen and skips
+ * them. Mirrors the web and Android clients.
+ */
+function apocentroStripMagicBytes(
+  newMessages: Array<RetrieveMessageItem>
+): Array<{ envelopePayload: Uint8Array; messageHash: string }> {
+  const result: Array<{ envelopePayload: Uint8Array; messageHash: string }> = [];
+  for (const m of newMessages) {
+    const raw = fromBase64ToArray(m.data);
+    if (!hasMagicBytes(raw)) {
+      continue;
+    }
+    result.push({ envelopePayload: stripMagicBytes(raw), messageHash: m.hash });
+  }
+  return result;
+}
+
 /**
  * We retrieve from multiple snodes at the same time, and merge their reported messages because it's easy
  * for a snode to be out of sync.
@@ -530,10 +553,7 @@ export class SwarmPolling {
         swarmLog(`No groupEncKeys for group: ${ed25519Str(pubkey)} yet. Skipping`);
       } else {
         const decryptedMessages = await MultiEncryptWrapperActions.decryptForGroup(
-          newMessages.map(m => ({
-            envelopePayload: fromBase64ToArray(m.data),
-            messageHash: m.hash,
-          })),
+          apocentroStripMagicBytes(newMessages),
           {
             proBackendPubkeyHex: ProBackendAPI.getServer().server.edPkHex,
             ed25519GroupPubkeyHex: pubkey,
@@ -562,10 +582,7 @@ export class SwarmPolling {
     const ed25519PrivateKeyHex = (await UserUtils.getUserED25519KeyPair()).privKey.slice(0, 64);
 
     const decryptedMessages = await MultiEncryptWrapperActions.decryptFor1o1(
-      newMessages.map(m => ({
-        envelopePayload: fromBase64ToArray(m.data),
-        messageHash: m.hash,
-      })),
+      apocentroStripMagicBytes(newMessages),
       {
         proBackendPubkeyHex: ProBackendAPI.getServer().server.edPkHex,
         ed25519PrivateKeyHex,
