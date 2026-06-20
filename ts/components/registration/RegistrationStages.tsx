@@ -1,6 +1,5 @@
 import { AnimatePresence } from 'framer-motion';
 import styled from 'styled-components';
-import { getAppDispatch } from '../../state/dispatch';
 import { Data } from '../../data/data';
 import { ConvoHub } from '../../session/conversations';
 import {
@@ -15,13 +14,9 @@ import {
 } from '../../state/onboarding/selectors/registration';
 import { Storage } from '../../util/storage';
 import { Flex } from '../basic/Flex';
-import { SpacerXL, SpacerXS } from '../basic/Text';
-import { SessionIcon } from '../icon';
+import { SpacerXL } from '../basic/Text';
 import { OnboardContainer } from './components';
 import { CreateAccount, RestoreAccount, Start } from './stages';
-import { showLinkVisitWarningDialog } from '../dialog/OpenUrlModal';
-import { SessionLucideIconButton } from '../icon/SessionIconButton';
-import { LUCIDE_ICONS_UNICODE } from '../icon/lucide';
 import { SnodePool } from '../../session/apis/snode_api/snodePool';
 
 export async function resetRegistration() {
@@ -47,30 +42,12 @@ export const RegistrationStages = () => {
   const creationStep = useOnboardAccountCreationStep();
   const restorationStep = useOnboardAccountRestorationStep();
 
-  const dispatch = getAppDispatch();
-
   return (
     <AnimatePresence>
       <StyledRegistrationContainer $container={true} $flexDirection="column">
-        <Flex $container={true} $alignItems="center" height={'30px'}>
-          <SessionIcon iconColor="var(--primary-color)" iconSize={'huge'} iconType="brand" />
-          <SpacerXS />
-          <div style={{ flexGrow: 1, zIndex: -1 }}>
-            <SessionIcon iconSize={140} iconType="session" iconColor="var(--text-primary-color)" />
-          </div>
-          <Flex $container={true} $alignItems="center">
-            <SessionLucideIconButton
-              ariaLabel="FAQ Link"
-              unicode={LUCIDE_ICONS_UNICODE.CIRCLE_HELP}
-              iconSize={'medium'}
-              padding="4px"
-              iconColor="var(--text-primary-color)"
-              dataTestId="session-faq-link"
-              onClick={() => {
-                showLinkVisitWarningDialog('https://getsession.org/faq', dispatch);
-              }}
-            />
-          </Flex>
+        <Flex $container={true} $alignItems="center" height={'40px'}>
+          <img src="images/session/session_icon.svg" alt="Apocentro" height={40} width={40} />
+          <div style={{ flexGrow: 1 }} />
         </Flex>
 
         <Flex $container={true} $flexDirection="column" $alignItems="center">

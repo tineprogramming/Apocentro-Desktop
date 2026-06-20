@@ -20,7 +20,6 @@ import {
   useUserSettingsCloseAction,
   useUserSettingsTitle,
 } from './userSettingsHooks';
-import { CallManager } from '../../../../session/utils';
 import { SessionButtonColor } from '../../../basic/SessionButton';
 import {
   useHasGiphyIntegrationEnabled,
@@ -35,36 +34,6 @@ import { UserSettingsModalContainer } from '../components/UserSettingsModalConta
 import { UserConfigWrapperActions } from '../../../../webworker/workers/browser/libsession/libsession_worker_userconfig_interface';
 import { toggleGiphyIntegration } from '../actions/toggleGiphyIntegration';
 import { getFeatureFlag } from '../../../../state/ducks/types/releasedFeaturesReduxTypes';
-
-const toggleCallMediaPermissions = async (triggerUIUpdate: () => void) => {
-  const currentValue = window.getCallMediaPermissions();
-  const onClose = () => window.inboxStore?.dispatch(updateConfirmModal(null));
-  if (!currentValue) {
-    window.inboxStore?.dispatch(
-      updateConfirmModal({
-        title: { token: 'callsVoiceAndVideoBeta' },
-        i18nMessage: { token: 'callsVoiceAndVideoModalDescription' },
-        okTheme: SessionButtonColor.Danger,
-        okText: { token: 'theContinue' },
-        onClickOk: async () => {
-          await window.toggleCallMediaPermissionsTo(true);
-          triggerUIUpdate();
-          CallManager.onTurnedOnCallMediaPermissions();
-          onClose();
-        },
-        onClickCancel: async () => {
-          await window.toggleCallMediaPermissionsTo(false);
-          triggerUIUpdate();
-          onClose();
-        },
-        onClickClose: onClose ? void onClose() : undefined,
-      })
-    );
-  } else {
-    await window.toggleCallMediaPermissionsTo(false);
-    triggerUIUpdate();
-  }
-};
 
 async function toggleLinkPreviews(isToggleOn: boolean, forceUpdate: () => void) {
   if (!isToggleOn) {
@@ -166,29 +135,6 @@ export function PrivacySettingsPage(modalState: UserSettingsModalState) {
       }
       onClose={closeAction || undefined}
     >
-      <PanelLabelWithDescription title={{ token: 'callsSettings' }} />
-      <PanelButtonGroup>
-        <SettingsToggleBasic
-          baseDataTestId="enable-calls"
-          active={Boolean(window.getCallMediaPermissions())}
-          onClick={async () => {
-            await toggleCallMediaPermissions(forceUpdate);
-            forceUpdate();
-          }}
-          text={{ token: 'callsVoiceAndVideoBeta' }}
-          subText={{ token: 'callsVoiceAndVideoToggleDescription' }}
-        />
-        <SettingsToggleBasic
-          baseDataTestId="enable-microphone"
-          active={Boolean(window.getSettingValue('media-permissions'))}
-          onClick={async () => {
-            await window.toggleMediaPermissions();
-            forceUpdate();
-          }}
-          text={{ token: 'permissionsMicrophone' }}
-          subText={{ token: 'permissionsMicrophoneDescriptionIos' }}
-        />
-      </PanelButtonGroup>
       <PanelLabelWithDescription title={{ token: 'sessionMessageRequests' }} />
       <PanelButtonGroup>
         <SettingsToggleBasic

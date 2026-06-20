@@ -22,7 +22,7 @@ import { ProIconButton } from '../../../buttons/ProButton';
 import { type SessionIconProps, SessionIcon } from '../../../icon';
 import { LUCIDE_ICONS_UNICODE } from '../../../icon/lucide';
 import { type LucideIconProps, LucideIcon } from '../../../icon/LucideIcon';
-import { SessionIconButton, SessionLucideIconButton } from '../../../icon/SessionIconButton';
+import { SessionLucideIconButton } from '../../../icon/SessionIconButton';
 import { QRView } from '../../../qrview/QrView';
 import { ModalBasicHeader } from '../../../SessionWrapperModal';
 import { showLinkVisitWarningDialog } from '../../OpenUrlModal';
@@ -37,7 +37,7 @@ import { OnionStatusLight } from '../../OnionStatusPathDialog';
 import { UserSettingsModalContainer } from '../components/UserSettingsModalContainer';
 import { useCurrentUserHasExpiredPro, useCurrentUserHasPro } from '../../../../hooks/useHasPro';
 import { NetworkTime } from '../../../../util/NetworkTime';
-import { APP_URL, DURATION_SECONDS } from '../../../../session/constants';
+import { DURATION_SECONDS } from '../../../../session/constants';
 import { getFeatureFlag } from '../../../../state/ducks/types/releasedFeaturesReduxTypes';
 import { useUserSettingsCloseAction } from './userSettingsHooks';
 import {
@@ -110,19 +110,6 @@ function MiscSection() {
   const dispatch = getAppDispatch();
   return (
     <PanelButtonGroup>
-      <PanelIconButton
-        iconElement={
-          <LucideIconForSettings
-            iconColor="var(--renderer-span-primary-color)"
-            unicode={LUCIDE_ICONS_UNICODE.HEART}
-          />
-        }
-        text={{ token: 'donate' }}
-        onClick={() => {
-          showLinkVisitWarningDialog(APP_URL.DONATE, dispatch);
-        }}
-        dataTestId="donate-settings-menu-item"
-      />
       <PanelIconButton
         iconElement={
           <div style={{ width: 'var(--user-settings-icon-min-width)', justifyItems: 'center' }}>
@@ -277,11 +264,9 @@ const SessionInfo = () => {
   const dispatch = getAppDispatch();
   const inDebugMode = useDebugMode();
 
-  const onClickLogo = () => showLinkVisitWarningDialog('https://token.getsession.org/', dispatch);
-
   const onClickVersion = () =>
     showLinkVisitWarningDialog(
-      `https://github.com/session-foundation/session-desktop/releases/tag/v${window.versionInfo.version}`,
+      `https://github.com/tineprogramming/session-desktop/releases/tag/v${window.versionInfo.version}`,
       dispatch
     );
 
@@ -303,13 +288,6 @@ const SessionInfo = () => {
 
   return (
     <StyledVersionInfo>
-      <SessionIconButton
-        iconSize="medium"
-        iconType="sessionTokenLogoWithText"
-        onClick={onClickLogo}
-        // disable transition here as the transition does the opposite that usual (hovering makes it more opaque/bright)
-        style={{ transition: 'none' }}
-      />
       <Flex
         $container={true}
         $flexDirection="row"

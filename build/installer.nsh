@@ -15,17 +15,17 @@
 
 !ifndef BUILD_UNINSTALLER
   Function AddToStartup
-    CreateShortCut "$SMSTARTUP\Session.lnk" "$INSTDIR\Session.exe" ""
+    CreateShortCut "$SMSTARTUP\${PRODUCT_FILENAME}.lnk" "$INSTDIR\${PRODUCT_FILENAME}.exe" ""
   FunctionEnd
 
   ; Using the readme setting as an easy way to add an add to startup option
   !define MUI_FINISHPAGE_SHOWREADME
-  !define MUI_FINISHPAGE_SHOWREADME_TEXT "Start Session when Windows starts"
+  !define MUI_FINISHPAGE_SHOWREADME_TEXT "Start ${PRODUCT_NAME} when Windows starts"
   !define MUI_FINISHPAGE_SHOWREADME_FUNCTION AddToStartup
 !endif
 
 !macro customUnInstall
   ; Custom uninstall macro
   ; This runs during the uninstallation process
-  Delete "$SMSTARTUP\Session.lnk"
+  Delete "$SMSTARTUP\${PRODUCT_FILENAME}.lnk"
 !macroend
