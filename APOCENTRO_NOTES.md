@@ -66,6 +66,9 @@ Reference implementations:
 **It is GREEN.** Download installers from the latest run's "Artifacts" section.
 
 ### What was done (commits, newest first)
+- Group sub-admin: surface "promote member to admin" for group admins (was hidden
+  behind upstream's `useClosedGroupV2QAButtons` QA flag) + add a no-demote
+  confirmation. See `APOCENTRO_GROUP_SUBADMIN.md`.
 - Remove "Session Network" item from settings
 - Remove upstream Session `build-binaries.yml` workflow (replaced by apocentro-build)
 - Fix `MessageSender` unit test for the magic-bytes prefix
@@ -92,6 +95,10 @@ Reference implementations:
   strips **group config** (info/members/keys) leniently on receive
 - `ts/localization/localeTools.ts` — `applyApocentroBrand()` inside
   `LocalizedStringBuilder.toString()` replaces the brand name for ALL strings/locales
+- `ts/session/apocentro/groupSubAdmin.ts` — group sub-admin enable flag +
+  promote-to-admin confirmation (see `APOCENTRO_GROUP_SUBADMIN.md`)
+- `ts/components/MemberListItem.tsx` — renders the per-member Promote / resend-promote
+  buttons for admins (Apocentro un-gates these from the QA flag)
 - `package.json` build config (appId, mac/win, repository → this fork)
 - `build/installer.nsh`, `build/installer-sidebar.bmp`, `build/icon*`, `images/`
 

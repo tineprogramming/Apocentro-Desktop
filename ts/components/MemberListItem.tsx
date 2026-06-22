@@ -3,8 +3,11 @@ import styled, { css } from 'styled-components';
 import { GroupPubkeyType, MemberStateGroupV2, PubkeyType } from 'libsession_util_nodejs';
 import { isEmpty } from 'lodash';
 import type { SessionDataTestId } from 'react';
-import { useWeAreAdmin } from '../hooks/useParamSelector';
-import { promoteUsersInGroup } from '../interactions/conversationInteractions';
+import { useConversationUsernameWithFallback, useWeAreAdmin } from '../hooks/useParamSelector';
+import {
+  APOCENTRO_GROUP_SUBADMIN_ENABLED,
+  confirmAndPromoteToAdmin,
+} from '../session/apocentro/groupSubAdmin';
 import { PubKey } from '../session/types';
 import { UserUtils } from '../session/utils';
 import { GroupInvite } from '../session/utils/job_runners/jobs/GroupInviteJob';
@@ -31,7 +34,6 @@ import { assertUnreachable } from '../types/sqlSharedTypes';
 import { tr } from '../localization/localeTools';
 import { ContactName } from './conversation/ContactName/ContactName';
 import type { ContactNameSuffixInMemberList } from './conversation/ContactName/ContactNameContext';
-import { getFeatureFlag } from '../state/ducks/types/releasedFeaturesReduxTypes';
 
 const AvatarContainer = styled.div`
   position: relative;
@@ -229,7 +231,7 @@ const ResendButton = ({ groupPk, pubkey }: { pubkey: PubkeyType; groupPk: GroupP
   const memberStatus = useMemberStatus(pubkey, groupPk);
 
   // as soon as the `admin` flag is set in the group for that member, we should be able to resend a promote as we cannot remove an admin.
-  const canResendPromotion = getFeatureFlag('useClosedGroupV2QAButtons') && nominatedAdmin;
+  const canResendPromotion = APOCENTRO_GROUP_SUBADMIN_ENABLED && nominatedAdmin;
 
   // we can always remove/and readd a non-admin member. So we consider that a member who accepted the invite cannot be resent an invite.
   const canResendInvite = !acceptedInvite;
@@ -277,11 +279,13 @@ const PromoteButton = ({ groupPk, pubkey }: { pubkey: PubkeyType; groupPk: Group
   const memberAcceptedInvite = useMemberHasAcceptedInvite(pubkey, groupPk);
   const memberIsNominatedAdmin = useMemberIsNominatedAdmin(pubkey, groupPk);
   const memberIsPendingRemoval = useMemberPendingRemoval(pubkey, groupPk);
-  // When invite-as-admin was used to invite that member, the resend button is available to resend the promote message.
-  // We want to show that button only to promote a normal member who accepted a normal invite but wasn't promoted yet.
-  // ^ this is only the case for testing. The UI will be different once we release the promotion process
+  const memberName = useConversationUsernameWithFallback(true, pubkey);
+  // Apocentro group sub-admin: an admin can promote a member who has accepted
+  // the invite (and isn't already a nominated admin / pending removal). The
+  // accepted-invite gate is the intended security filter — you cannot hand the
+  // admin key to someone who hasn't joined.
   if (
-    !getFeatureFlag('useClosedGroupV2QAButtons') ||
+    !APOCENTRO_GROUP_SUBADMIN_ENABLED ||
     !memberAcceptedInvite ||
     memberIsNominatedAdmin ||
     memberIsPendingRemoval
@@ -296,10 +300,7 @@ const PromoteButton = ({ groupPk, pubkey }: { pubkey: PubkeyType; groupPk: Group
       buttonColor={SessionButtonColor.Danger}
       text={tr('promote')}
       onClick={() => {
-        void promoteUsersInGroup({
-          groupPk,
-          toPromote: [pubkey],
-        });
+        confirmAndPromoteToAdmin({ groupPk, pubkey, memberName });
       }}
     />
   );
