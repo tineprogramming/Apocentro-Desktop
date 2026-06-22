@@ -49,7 +49,7 @@ export function confirmAndPromoteToAdmin({
   window.inboxStore?.dispatch(
     updateConfirmModal({
       title: { token: 'promote' },
-      i18nMessage: { token: 'adminPromoteDescription', args: { name: memberName } },
+      i18nMessage: { token: 'adminPromoteDescription', name: memberName },
       okTheme: SessionButtonColor.Danger,
       okText: { token: 'promote' },
       onClickOk: async () => {
