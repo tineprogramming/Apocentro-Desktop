@@ -31,6 +31,7 @@ import { ReadyToDisappearMsgUpdate } from '../../disappearing_messages/types';
 import { MessageQueue, MessageSender } from '../../sending';
 import { getIsRinging } from '../RingingManager';
 import { getBlackSilenceMediaStream } from './Silence';
+import { getApocentroIceServers } from './ApocentroCallConfig';
 import { ed25519Str } from '../String';
 import { WithMessageHash } from '../../types/with';
 import { NetworkTime } from '../../../util/NetworkTime';
@@ -136,48 +137,9 @@ let ignoreOffer = false;
 let isSettingRemoteAnswerPending = false;
 let lastOutgoingOfferTimestamp = -Infinity;
 
-/**
- * This array holds all of the ice servers Session can contact.
- * They are all contacted at the same time, so before triggering the request, we get only a subset of those, randomly
- */
-const iceServersFullArray = [
-  {
-    urls: 'turn:freyr.getsession.org',
-    username: 'session202111',
-    credential: '053c268164bc7bd7',
-  },
-  // excluding those two (fenrir & frigg) as they are TCP only for now
-  // {
-  //   urls: 'turn:fenrir.getsession.org',
-  //   username: 'session202111',
-  //   credential: '053c268164bc7bd7',
-  // },
-  // {
-  //   urls: 'turn:frigg.getsession.org',
-  //   username: 'session202111',
-  //   credential: '053c268164bc7bd7',
-  // },
-  {
-    urls: 'turn:angus.getsession.org',
-    username: 'session202111',
-    credential: '053c268164bc7bd7',
-  },
-  {
-    urls: 'turn:hereford.getsession.org',
-    username: 'session202111',
-    credential: '053c268164bc7bd7',
-  },
-  {
-    urls: 'turn:holstein.getsession.org',
-    username: 'session202111',
-    credential: '053c268164bc7bd7',
-  },
-  {
-    urls: 'turn:brahman.getsession.org',
-    username: 'session202111',
-    credential: '053c268164bc7bd7',
-  },
-];
+// Apocentro: ICE servers are fetched at call time from our own Cloudflare TURN
+// Worker (see ./ApocentroCallConfig), replacing Session's hard-coded
+// *.getsession.org TURN. Direct P2P is preferred; TURN is only a relay fallback.
 
 const configuration: RTCConfiguration = {
   bundlePolicy: 'max-bundle',
@@ -520,7 +482,7 @@ export async function USER_callRecipient(recipient: string) {
   }
   currentCallUUID = uuidv4();
   const justCreatedCallUUID = currentCallUUID;
-  peerConnection = createOrGetPeerConnection(recipient);
+  peerConnection = await createOrGetPeerConnection(recipient);
   // send a pre offer just to wake up the device on the remote side
   const preOfferMsg = new CallMessage({
     createAtNetworkTimestamp: NetworkTime.now(),
@@ -778,13 +740,13 @@ function onDataChannelOnOpen() {
   sendVideoStatusViaDataChannel();
 }
 
-function createOrGetPeerConnection(withPubkey: string) {
+async function createOrGetPeerConnection(withPubkey: string) {
   if (peerConnection) {
     return peerConnection;
   }
   remoteStream = new MediaStream();
-  const sampleOfICeServers = _.sampleSize(iceServersFullArray, 2);
-  peerConnection = new RTCPeerConnection({ ...configuration, iceServers: sampleOfICeServers });
+  const iceServers = await getApocentroIceServers();
+  peerConnection = new RTCPeerConnection({ ...configuration, iceServers });
   dataChannel = peerConnection.createDataChannel('session-datachannel', {
     ordered: true,
     negotiated: true,
@@ -880,7 +842,7 @@ export async function USER_acceptIncomingCallRequest(fromSender: string) {
   }
   currentCallUUID = lastOfferMessage.uuid;
 
-  peerConnection = createOrGetPeerConnection(fromSender);
+  peerConnection = await createOrGetPeerConnection(fromSender);
 
   await openMediaDevicesAndAddTracks();
 
