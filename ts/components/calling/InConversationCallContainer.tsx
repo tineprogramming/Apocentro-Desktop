@@ -143,6 +143,72 @@ const StyledCallInfoOverlay = styled.div`
   white-space: nowrap;
 `;
 
+const StyledConnBadge = styled.div<{ $connected: boolean }>`
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 9px;
+  border-radius: 11px;
+  font-weight: 600;
+  margin-bottom: 4px;
+  background: ${props =>
+    props.$connected ? 'rgba(0, 190, 100, 0.92)' : 'rgba(255, 255, 255, 0.14)'};
+  color: ${props => (props.$connected ? '#04150c' : 'var(--text-primary-color)')};
+`;
+
+const StyledBars = styled.div`
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 13px;
+`;
+
+const StyledBar = styled.div<{ $on: boolean; $h: number; $connected: boolean }>`
+  width: 3px;
+  height: ${props => props.$h}px;
+  border-radius: 1px;
+  background: ${props =>
+    props.$on
+      ? props.$connected
+        ? '#04150c'
+        : 'var(--text-primary-color)'
+      : props.$connected
+        ? 'rgba(4, 21, 12, 0.3)'
+        : 'rgba(255, 255, 255, 0.25)'};
+`;
+
+const SignalBars = ({ filled, connected }: { filled: number; connected: boolean }) => {
+  const heights = [5, 8, 11, 14];
+  return (
+    <StyledBars>
+      {heights.map((h, i) => (
+        <StyledBar key={h} $h={h} $on={i < filled} $connected={connected} />
+      ))}
+    </StyledBars>
+  );
+};
+
+// Signal-strength bars (0–4) from round-trip latency, like the Android overlay.
+function barsForConnection(stats: ApocentroCallStats | null): number {
+  if (!stats || stats.connectionState !== 'connected') {
+    return 0;
+  }
+  const rtt = stats.rttMs;
+  if (rtt == null) {
+    return 2;
+  }
+  if (rtt < 60) {
+    return 4;
+  }
+  if (rtt < 150) {
+    return 3;
+  }
+  if (rtt < 300) {
+    return 2;
+  }
+  return 1;
+}
+
 const ApocentroCallInfoOverlay = () => {
   // Show for the whole ongoing call (ringing / connecting / connected) so it's
   // useful precisely while a call is still trying to connect.
@@ -167,16 +233,18 @@ const ApocentroCallInfoOverlay = () => {
 
   const lanReachable = ongoingCallPubkey ? isPeerReachableOnLan(ongoingCallPubkey) : false;
   const lanSend = getLastLanSendStatus();
+  const isConnected = stats?.connectionState === 'connected';
   const badge = stats?.isLocalNetwork ? 'Local network' : (stats?.type ?? '…');
   const remoteCountry = countryForIp(stats?.remoteAddress ?? null);
   return (
     <StyledCallInfoOverlay>
+      <StyledConnBadge $connected={isConnected}>
+        {badge}
+        <SignalBars filled={barsForConnection(stats)} connected={isConnected} />
+        {stats?.rttMs != null ? `${stats.rttMs} ms` : ''}
+      </StyledConnBadge>
       <div>LAN peer: {lanReachable ? 'discovered ✓' : 'not discovered ✗'}</div>
       <div>LAN send: {lanSend ? (lanSend.ok ? 'OK ✓' : 'failed ✗') : '—'}</div>
-      <div>
-        {badge}
-        {stats?.rttMs != null ? ` · ${stats.rttMs} ms` : ''}
-      </div>
       <div>state: {stats?.connectionState ?? '…'}</div>
       {stats?.remoteAddress && (
         <div>
