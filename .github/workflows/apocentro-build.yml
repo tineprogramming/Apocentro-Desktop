@@ -16,6 +16,7 @@ on:
   push:
     branches:
       - claude/apocentro-web-recovery-q13fec
+      - claude/tine-apocentro-folk-calling-rl7c5j
 
 concurrency:
   group: apocentro-build-${{ github.ref }}
