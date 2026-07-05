@@ -244,16 +244,18 @@ class ApocentroLan extends EventEmitter {
       this.log(`mDNS service down: ${service.name} (keeping last known address)`);
     });
 
-    // Re-issue the browse query periodically so we recover quickly from any
-    // missed announcements (e.g. right after startup) instead of waiting for the
-    // peer's next unsolicited announcement.
-    this.rebrowseTimer = setInterval(() => {
+    // Re-issue the browse query so we recover quickly from missed announcements
+    // (common right after startup) instead of waiting for the peer's next
+    // unsolicited announcement. Fire a few early one-shots, then keep a steady 8s.
+    const reQuery = () => {
       try {
         (this.browser as unknown as { update?: () => void } | null)?.update?.();
       } catch {
         /* ignore */
       }
-    }, 15_000);
+    };
+    [1500, 3500, 6000, 10000].forEach(ms => setTimeout(reQuery, ms));
+    this.rebrowseTimer = setInterval(reQuery, 8_000);
   }
 
   private tokenOf(service: Service): string | undefined {

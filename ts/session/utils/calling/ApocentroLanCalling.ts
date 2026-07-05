@@ -97,12 +97,21 @@ export async function initApocentroLanCalling(): Promise<void> {
   );
   await window.apocentroLan.start(ourPubKey, contacts);
 
-  // Keep the contacts-only discovery index fresh: contacts may not be fully
-  // loaded at startup, and can change while the app runs. A cheap periodic
-  // refresh keeps the peer matchable so a call doesn't miss the LAN path.
-  setInterval(() => {
-    void refreshApocentroLanContacts();
-  }, 30_000);
+  // Keep the contacts-only discovery index fresh. Contacts are often not loaded
+  // yet in the first seconds after startup (so the index would be empty and the
+  // peer unmatchable), so refresh aggressively for the first minute, then settle.
+  let refreshCount = 0;
+  const scheduleRefresh = () => {
+    setTimeout(
+      () => {
+        void refreshApocentroLanContacts();
+        refreshCount += 1;
+        scheduleRefresh();
+      },
+      refreshCount < 12 ? 5_000 : 30_000
+    );
+  };
+  scheduleRefresh();
 }
 
 /** Refresh the contacts-only discovery index (e.g. after a contact change). */

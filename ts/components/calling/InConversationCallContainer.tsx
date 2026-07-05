@@ -128,21 +128,21 @@ const DurationLabel = () => {
 // while a call is connected.
 const StyledCallInfoOverlay = styled.div`
   position: absolute;
-  top: 30px; // sits just under the ringing/connecting/duration label, like extra lines of it
-  left: 50%;
-  transform: translateX(-50%);
+  top: 4px;
+  left: 4px; // top-left corner so it never covers the centered call controls or avatar
   z-index: 6;
-  color: var(--text-secondary-color);
-  font-size: 11px;
-  line-height: 1.5;
+  padding: 4px 7px;
+  border-radius: 7px;
+  background: rgba(0, 0, 0, 0.45);
+  color: var(--text-primary-color);
+  font-size: 10px;
+  line-height: 1.4;
   font-family: var(--font-mono, monospace);
   pointer-events: none;
-  max-width: 90%;
+  max-width: 46%;
   white-space: nowrap;
-  text-align: center;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
 `;
 
 const StyledConnBadge = styled.div<{ $connected: boolean }>`
