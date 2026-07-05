@@ -28,6 +28,13 @@ const SETTING_KEY = 'apocentro-lan-calling';
 let started = false;
 const reachablePeers = new Set<string>();
 
+// Last LAN call-signal send outcome, surfaced in the call overlay for debugging.
+let lastLanSend: { ok: boolean; type: string } | null = null;
+
+export function getLastLanSendStatus(): { ok: boolean; type: string } | null {
+  return lastLanSend;
+}
+
 /** LAN/offline calling is on by default; only an explicit `false` disables it. */
 export function isLanCallingEnabled(): boolean {
   try {
@@ -134,8 +141,14 @@ export async function trySendCallSignalOverLan(rawMessage: OutgoingRawMessage): 
       },
     ]);
     const payloadBase64 = ByteBuffer.wrap(wrapped.encryptedAndWrappedData).toString('base64');
-    return await window.apocentroLan.send(pubkey, payloadBase64);
+    const ok = await window.apocentroLan.send(pubkey, payloadBase64);
+    lastLanSend = { ok, type: 'signal' };
+    window?.log?.info(
+      `[ApocentroLan] call signal to ${pubkey.slice(0, 8)}… over LAN: ${ok ? 'OK' : 'FAILED → onion'}`
+    );
+    return ok;
   } catch (e) {
+    lastLanSend = { ok: false, type: 'error' };
     window?.log?.warn(
       `[ApocentroLan] trySendCallSignalOverLan failed: ${
         e instanceof Error ? e.message : String(e)
