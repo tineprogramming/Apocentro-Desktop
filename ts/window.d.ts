@@ -90,5 +90,18 @@ declare global {
     setZoomFactor: (newZoom: number) => void;
     updateZoomFactor: () => void;
     getUserKeys: () => Promise<{ id: string; vbid: string }>;
+
+    // Apocentro LAN calling: bridge to the main-process net/mDNS transport (see preload.js).
+    apocentroLan?: {
+      start: (ourPubKey: string, contactPubKeys: Array<string>) => Promise<void>;
+      stop: () => void;
+      updateContacts: (contactPubKeys: Array<string>) => void;
+      learnPeer: (pubkey: string, host: string, port: number) => void;
+      send: (toPubKey: string, payloadBase64: string) => Promise<boolean>;
+      onPeer: (cb: (peer: { pubkey: string; host: string; port: number }) => void) => void;
+      onIncoming: (
+        cb: (frame: { payloadBase64: string; host: string; senderPort: number }) => void
+      ) => void;
+    };
   }
 }

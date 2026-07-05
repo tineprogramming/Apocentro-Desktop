@@ -29,6 +29,8 @@ import { configDotenv } from 'dotenv';
 
 import _, { isEmpty, isNumber, isFinite } from 'lodash';
 
+import { apocentroLan } from './apocentro_lan';
+
 import { addHandler } from '../node/global_errors';
 import { setup as setupSpellChecker } from '../node/spell_check';
 
@@ -531,6 +533,31 @@ async function createWindow() {
 
 ipc.on('show-window', () => {
   showWindow();
+});
+
+// Apocentro LAN calling: bridge the main-process net/mDNS transport to the
+// renderer (CallManager). The renderer produces the encrypted + magic-byte
+// wrapped 1:1 payload; this side only moves opaque bytes over the LAN.
+apocentroLan.on('peer', peer => {
+  mainWindow?.webContents.send('apocentro-lan:peer', peer);
+});
+apocentroLan.on('incoming', frame => {
+  mainWindow?.webContents.send('apocentro-lan:incoming', frame);
+});
+ipc.handle('apocentro-lan:start', async (_event, ourPubKey: string, contactPubKeys: Array<string>) => {
+  await apocentroLan.start(ourPubKey, contactPubKeys);
+});
+ipc.on('apocentro-lan:stop', () => {
+  apocentroLan.stop();
+});
+ipc.on('apocentro-lan:update-contacts', (_event, contactPubKeys: Array<string>) => {
+  apocentroLan.updateContacts(contactPubKeys);
+});
+ipc.on('apocentro-lan:learn-peer', (_event, pubkey: string, host: string, port: number) => {
+  apocentroLan.learnPeer(pubkey, host, port);
+});
+ipc.handle('apocentro-lan:send', async (_event, toPubKey: string, payloadBase64: string) => {
+  return apocentroLan.send(toPubKey, Buffer.from(payloadBase64, 'base64'));
 });
 
 ipc.on('set-release-from-file-server', (_event, releaseInfoFromFileServer) => {
