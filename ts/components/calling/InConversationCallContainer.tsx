@@ -24,6 +24,7 @@ import {
 } from '../../session/utils/calling/CallManager';
 import { CallWindowControls } from './CallButtons';
 import { ensureGeoReader, countryForIp } from '../../session/utils/calling/ApocentroGeo';
+import { isPeerReachableOnLan } from '../../session/utils/calling/ApocentroLanCalling';
 
 import { useFormattedDuration } from '../../hooks/useFormattedDuration';
 import { SessionSpinner } from '../loading';
@@ -143,6 +144,7 @@ const ApocentroCallInfoOverlay = () => {
   // Show for the whole ongoing call (ringing / connecting / connected) so it's
   // useful precisely while a call is still trying to connect.
   const hasOngoingCall = useSelector(getHasOngoingCallWithFocusedConvo);
+  const ongoingCallPubkey = useSelector(getHasOngoingCallWithPubkey);
   const [stats, setStats] = useState<ApocentroCallStats | null>(null);
 
   useMount(() => {
@@ -156,26 +158,28 @@ const ApocentroCallInfoOverlay = () => {
     void CallManager.getApocentroCallStats().then(setStats);
   }, 1000);
 
-  if (!hasOngoingCall || !stats) {
+  if (!hasOngoingCall) {
     return null;
   }
 
-  const badge = stats.isLocalNetwork ? 'Local network' : stats.type;
-  const remoteCountry = countryForIp(stats.remoteAddress);
+  const lanReachable = ongoingCallPubkey ? isPeerReachableOnLan(ongoingCallPubkey) : false;
+  const badge = stats?.isLocalNetwork ? 'Local network' : (stats?.type ?? '…');
+  const remoteCountry = countryForIp(stats?.remoteAddress ?? null);
   return (
     <StyledCallInfoOverlay>
+      <div>LAN peer: {lanReachable ? 'discovered ✓' : 'not discovered ✗'}</div>
       <div>
         {badge}
-        {stats.rttMs != null ? ` · ${stats.rttMs} ms` : ''}
+        {stats?.rttMs != null ? ` · ${stats.rttMs} ms` : ''}
       </div>
-      <div>state: {stats.connectionState}</div>
-      {stats.remoteAddress && (
+      <div>state: {stats?.connectionState ?? '…'}</div>
+      {stats?.remoteAddress && (
         <div>
           peer: {remoteCountry ? `${remoteCountry.flag} ` : ''}
           {stats.remoteAddress} ({stats.remoteCandidateType})
         </div>
       )}
-      {stats.localAddress && (
+      {stats?.localAddress && (
         <div>
           you: {stats.localAddress} ({stats.localCandidateType})
         </div>
