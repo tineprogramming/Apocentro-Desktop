@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { useSelector } from 'react-redux';
 
 import useInterval from 'react-use/lib/useInterval';
+import useMount from 'react-use/lib/useMount';
 import styled from 'styled-components';
 import { CallManager, UserUtils } from '../../session/utils';
 import {
@@ -22,6 +23,7 @@ import {
   type ApocentroCallStats,
 } from '../../session/utils/calling/CallManager';
 import { CallWindowControls } from './CallButtons';
+import { ensureGeoReader, countryForIp } from '../../session/utils/calling/ApocentroGeo';
 
 import { useFormattedDuration } from '../../hooks/useFormattedDuration';
 import { SessionSpinner } from '../loading';
@@ -138,21 +140,28 @@ const StyledCallInfoOverlay = styled.div`
 `;
 
 const ApocentroCallInfoOverlay = () => {
-  const isConnected = useSelector(getCallWithFocusedConvosIsConnected);
+  // Show for the whole ongoing call (ringing / connecting / connected) so it's
+  // useful precisely while a call is still trying to connect.
+  const hasOngoingCall = useSelector(getHasOngoingCallWithFocusedConvo);
   const [stats, setStats] = useState<ApocentroCallStats | null>(null);
 
+  useMount(() => {
+    ensureGeoReader();
+  });
+
   useInterval(() => {
-    if (!isConnected) {
+    if (!hasOngoingCall) {
       return;
     }
     void CallManager.getApocentroCallStats().then(setStats);
   }, 1000);
 
-  if (!isConnected || !stats) {
+  if (!hasOngoingCall || !stats) {
     return null;
   }
 
   const badge = stats.isLocalNetwork ? 'Local network' : stats.type;
+  const remoteCountry = countryForIp(stats.remoteAddress);
   return (
     <StyledCallInfoOverlay>
       <div>
@@ -162,7 +171,8 @@ const ApocentroCallInfoOverlay = () => {
       <div>state: {stats.connectionState}</div>
       {stats.remoteAddress && (
         <div>
-          peer: {stats.remoteAddress} ({stats.remoteCandidateType})
+          peer: {remoteCountry ? `${remoteCountry.flag} ` : ''}
+          {stats.remoteAddress} ({stats.remoteCandidateType})
         </div>
       )}
       {stats.localAddress && (
