@@ -22,14 +22,7 @@ import { devSimpleNoArgs, type TokenDevNoArgs } from './devStrings';
 // capital S only matches the brand, never the common noun "session".
 const APOCENTRO_BRAND_RE = /\bSession\b/g;
 function applyApocentroBrand(str: string): string {
-  return (
-    str
-      .replace(APOCENTRO_BRAND_RE, 'Apocentro')
-      // Apocentro: calling is a shipped feature here, not a beta — drop the
-      // upstream "(Beta)" tag (e.g. "Voice and Video Calls (Beta)" → "Voice and
-      // Video Calls", "Calls (Beta)" → "Calls").
-      .replace(/\s*\(Beta\)/gi, '')
-  );
+  return str.replace(APOCENTRO_BRAND_RE, 'Apocentro');
 }
 
 // NOTE: this forces a plural string to use the "1" variant
