@@ -128,16 +128,13 @@ const DurationLabel = () => {
 // while a call is connected.
 const StyledCallInfoOverlay = styled.div`
   position: absolute;
-  bottom: 8px;
+  top: 30px; // sits just under the ringing/connecting/duration label, like extra lines of it
   left: 50%;
   transform: translateX(-50%);
   z-index: 6;
-  padding: 6px 12px;
-  border-radius: 10px;
-  background: rgba(0, 0, 0, 0.55);
-  color: var(--text-primary-color);
+  color: var(--text-secondary-color);
   font-size: 11px;
-  line-height: 1.45;
+  line-height: 1.5;
   font-family: var(--font-mono, monospace);
   pointer-events: none;
   max-width: 90%;

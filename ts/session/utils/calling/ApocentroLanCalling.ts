@@ -96,6 +96,13 @@ export async function initApocentroLanCalling(): Promise<void> {
     `[ApocentroLan] starting discovery: me=${ourPubKey.slice(0, 8)}… contacts=${contacts.length}`
   );
   await window.apocentroLan.start(ourPubKey, contacts);
+
+  // Keep the contacts-only discovery index fresh: contacts may not be fully
+  // loaded at startup, and can change while the app runs. A cheap periodic
+  // refresh keeps the peer matchable so a call doesn't miss the LAN path.
+  setInterval(() => {
+    void refreshApocentroLanContacts();
+  }, 30_000);
 }
 
 /** Refresh the contacts-only discovery index (e.g. after a contact change). */

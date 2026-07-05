@@ -87,6 +87,7 @@ class ApocentroLan extends EventEmitter {
   // address -> expiry time; addresses that recently failed to connect
   private unreachable = new Map<string, number>();
   private rotateTimer: NodeJS.Timeout | null = null;
+  private rebrowseTimer: NodeJS.Timeout | null = null;
 
   private log(message: string): void {
     // eslint-disable-next-line no-console
@@ -127,6 +128,10 @@ class ApocentroLan extends EventEmitter {
     if (this.rotateTimer) {
       clearInterval(this.rotateTimer);
       this.rotateTimer = null;
+    }
+    if (this.rebrowseTimer) {
+      clearInterval(this.rebrowseTimer);
+      this.rebrowseTimer = null;
     }
     try {
       this.browser?.stop();
@@ -231,14 +236,24 @@ class ApocentroLan extends EventEmitter {
     }
     this.browser = this.bonjour.find({ type: SERVICE_TYPE });
     this.browser.on('up', (service: Service) => this.onServiceUp(service));
+    // Intentionally do NOT drop the peer on 'down': mDNS services flap (missed
+    // announcements, brief sleeps) and dropping them makes discovery unreliable
+    // right when a call starts. We keep the last known address; the 30s negative
+    // cache handles an address that has genuinely gone away.
     this.browser.on('down', (service: Service) => {
-      // best-effort: drop any discovered peer that resolved to this instance
-      const token = this.tokenOf(service);
-      const pubkey = token ? this.contactTokenIndex.get(token) : undefined;
-      if (pubkey) {
-        this.discoveredPeers.delete(pubkey);
-      }
+      this.log(`mDNS service down: ${service.name} (keeping last known address)`);
     });
+
+    // Re-issue the browse query periodically so we recover quickly from any
+    // missed announcements (e.g. right after startup) instead of waiting for the
+    // peer's next unsolicited announcement.
+    this.rebrowseTimer = setInterval(() => {
+      try {
+        (this.browser as unknown as { update?: () => void } | null)?.update?.();
+      } catch {
+        /* ignore */
+      }
+    }, 15_000);
   }
 
   private tokenOf(service: Service): string | undefined {
