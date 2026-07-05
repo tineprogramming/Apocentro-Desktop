@@ -17,7 +17,10 @@ import { StyledVideoElement } from './DraggableCallContainer';
 
 import { useModuloWithTripleDots } from '../../hooks/useModuloWithTripleDots';
 import { useVideoCallEventsListener } from '../../hooks/useVideoEventListener';
-import { DEVICE_DISABLED_DEVICE_ID } from '../../session/utils/calling/CallManager';
+import {
+  DEVICE_DISABLED_DEVICE_ID,
+  type ApocentroCallStats,
+} from '../../session/utils/calling/CallManager';
 import { CallWindowControls } from './CallButtons';
 
 import { useFormattedDuration } from '../../hooks/useFormattedDuration';
@@ -114,6 +117,63 @@ const DurationLabel = () => {
   return <StyledCenteredLabel>{dateString}</StyledCenteredLabel>;
 };
 
+// Apocentro: on-screen call diagnostics (connection type, latency, selected
+// local/remote candidate + state), like the Android call debug overlay. Shown
+// while a call is connected.
+const StyledCallInfoOverlay = styled.div`
+  position: absolute;
+  top: 6px;
+  left: 6px;
+  z-index: 6;
+  padding: 6px 9px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.55);
+  color: var(--text-primary-color);
+  font-size: 11px;
+  line-height: 1.45;
+  font-family: var(--font-mono, monospace);
+  pointer-events: none;
+  max-width: 60%;
+  white-space: nowrap;
+`;
+
+const ApocentroCallInfoOverlay = () => {
+  const isConnected = useSelector(getCallWithFocusedConvosIsConnected);
+  const [stats, setStats] = useState<ApocentroCallStats | null>(null);
+
+  useInterval(() => {
+    if (!isConnected) {
+      return;
+    }
+    void CallManager.getApocentroCallStats().then(setStats);
+  }, 1000);
+
+  if (!isConnected || !stats) {
+    return null;
+  }
+
+  const badge = stats.isLocalNetwork ? 'Local network' : stats.type;
+  return (
+    <StyledCallInfoOverlay>
+      <div>
+        {badge}
+        {stats.rttMs != null ? ` · ${stats.rttMs} ms` : ''}
+      </div>
+      <div>state: {stats.connectionState}</div>
+      {stats.remoteAddress && (
+        <div>
+          peer: {stats.remoteAddress} ({stats.remoteCandidateType})
+        </div>
+      )}
+      {stats.localAddress && (
+        <div>
+          you: {stats.localAddress} ({stats.localCandidateType})
+        </div>
+      )}
+    </StyledCallInfoOverlay>
+  );
+};
+
 const StyledSpinner = styled.div<{ $fullWidth: boolean }>`
   height: 100%;
   width: ${props => (props.$fullWidth ? '100%' : '50%')};
@@ -189,6 +249,7 @@ export const InConversationCallContainer = () => {
         <RingingLabel />
         <ConnectingLabel />
         <DurationLabel />
+        <ApocentroCallInfoOverlay />
         <VideoContainer>
           <VideoLoadingSpinner fullWidth={false} />
           <StyledVideoElement

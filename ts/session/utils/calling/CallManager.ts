@@ -1539,3 +1539,91 @@ export function getCurrentCallDuration() {
     ? Math.floor((Date.now() - currentCallStartTimestamp) / 1000)
     : undefined;
 }
+
+// Apocentro: live call diagnostics for the on-screen call-info overlay (mirrors
+// the Android call debug overlay: connection type, latency, selected local/remote
+// candidate). Read from the WebRTC stats of the active peer connection.
+export type ApocentroCallStats = {
+  connectionState: string;
+  type: 'Direct' | 'Relay' | 'Unknown';
+  isLocalNetwork: boolean;
+  rttMs: number | null;
+  localAddress: string | null;
+  remoteAddress: string | null;
+  localCandidateType: string | null;
+  remoteCandidateType: string | null;
+};
+
+function isPrivateIp(ip: string | null): boolean {
+  if (!ip) {
+    return false;
+  }
+  return (
+    /^10\./.test(ip) ||
+    /^192\.168\./.test(ip) ||
+    /^172\.(1[6-9]|2\d|3[01])\./.test(ip) ||
+    /^169\.254\./.test(ip) ||
+    /^127\./.test(ip) ||
+    /^(fd|fe80)/i.test(ip)
+  );
+}
+
+export async function getApocentroCallStats(): Promise<ApocentroCallStats | null> {
+  if (!peerConnection) {
+    return null;
+  }
+  try {
+    const reports = await peerConnection.getStats();
+    const byId = new Map<string, any>();
+    let selectedPair: any = null;
+    reports.forEach((report: any) => {
+      byId.set(report.id, report);
+    });
+    reports.forEach((report: any) => {
+      if (report.type === 'candidate-pair' && (report.nominated || report.state === 'succeeded')) {
+        if (!selectedPair || report.selected || report.nominated) {
+          selectedPair = report;
+        }
+      }
+    });
+
+    const base: ApocentroCallStats = {
+      connectionState: peerConnection.connectionState,
+      type: 'Unknown',
+      isLocalNetwork: false,
+      rttMs: null,
+      localAddress: null,
+      remoteAddress: null,
+      localCandidateType: null,
+      remoteCandidateType: null,
+    };
+    if (!selectedPair) {
+      return base;
+    }
+
+    const local = byId.get(selectedPair.localCandidateId);
+    const remote = byId.get(selectedPair.remoteCandidateId);
+    const localType = local?.candidateType ?? null;
+    const remoteType = remote?.candidateType ?? null;
+    const localAddress = local?.address ?? local?.ip ?? null;
+    const remoteAddress = remote?.address ?? remote?.ip ?? null;
+    const rttMs =
+      typeof selectedPair.currentRoundTripTime === 'number'
+        ? Math.round(selectedPair.currentRoundTripTime * 1000)
+        : null;
+    const isRelay = localType === 'relay' || remoteType === 'relay';
+
+    return {
+      ...base,
+      type: isRelay ? 'Relay' : 'Direct',
+      isLocalNetwork: localType === 'host' && remoteType === 'host' && isPrivateIp(remoteAddress),
+      rttMs,
+      localAddress,
+      remoteAddress,
+      localCandidateType: localType,
+      remoteCandidateType: remoteType,
+    };
+  } catch {
+    return null;
+  }
+}
