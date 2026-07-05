@@ -97,7 +97,10 @@ declare global {
       stop: () => void;
       updateContacts: (contactPubKeys: Array<string>) => void;
       learnPeer: (pubkey: string, host: string, port: number) => void;
-      send: (toPubKey: string, payloadBase64: string) => Promise<boolean>;
+      send: (
+        toPubKey: string,
+        payloadBase64: string
+      ) => Promise<{ ok: boolean; detail: string }>;
       onPeer: (cb: (peer: { pubkey: string; host: string; port: number }) => void) => void;
       onIncoming: (
         cb: (frame: { payloadBase64: string; host: string; senderPort: number }) => void

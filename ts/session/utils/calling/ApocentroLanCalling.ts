@@ -29,9 +29,9 @@ let started = false;
 const reachablePeers = new Set<string>();
 
 // Last LAN call-signal send outcome, surfaced in the call overlay for debugging.
-let lastLanSend: { ok: boolean; type: string } | null = null;
+let lastLanSend: { ok: boolean; detail: string } | null = null;
 
-export function getLastLanSendStatus(): { ok: boolean; type: string } | null {
+export function getLastLanSendStatus(): { ok: boolean; detail: string } | null {
   return lastLanSend;
 }
 
@@ -141,14 +141,16 @@ export async function trySendCallSignalOverLan(rawMessage: OutgoingRawMessage): 
       },
     ]);
     const payloadBase64 = ByteBuffer.wrap(wrapped.encryptedAndWrappedData).toString('base64');
-    const ok = await window.apocentroLan.send(pubkey, payloadBase64);
-    lastLanSend = { ok, type: 'signal' };
+    const res = await window.apocentroLan.send(pubkey, payloadBase64);
+    lastLanSend = { ok: res.ok, detail: res.detail };
     window?.log?.info(
-      `[ApocentroLan] call signal to ${pubkey.slice(0, 8)}… over LAN: ${ok ? 'OK' : 'FAILED → onion'}`
+      `[ApocentroLan] call signal to ${pubkey.slice(0, 8)}… over LAN: ${
+        res.ok ? 'OK' : 'FAILED → onion'
+      } (${res.detail})`
     );
-    return ok;
+    return res.ok;
   } catch (e) {
-    lastLanSend = { ok: false, type: 'error' };
+    lastLanSend = { ok: false, detail: 'error' };
     window?.log?.warn(
       `[ApocentroLan] trySendCallSignalOverLan failed: ${
         e instanceof Error ? e.message : String(e)

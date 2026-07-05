@@ -66,13 +66,6 @@ function ourIpv4s(): Array<string> {
   return out;
 }
 
-/** True if `host` shares a /24 with one of our own IPv4s (cheap "is it local?" pre-check). */
-function isOnALocalSubnet(host: string): boolean {
-  const prefixOf = (ip: string) => ip.split('.').slice(0, 3).join('.');
-  const peerPrefix = prefixOf(host);
-  return ourIpv4s().some(ip => prefixOf(ip) === peerPrefix);
-}
-
 class ApocentroLan extends EventEmitter {
   private bonjour: Bonjour | null = null;
   private published: Service | null = null;
@@ -173,23 +166,32 @@ class ApocentroLan extends EventEmitter {
   }
 
   /** Attempt to deliver `payload` to a contact over the LAN. Resolves false on any failure. */
-  public async send(toPubKey: string, payload: Buffer): Promise<boolean> {
+  public async send(
+    toPubKey: string,
+    payload: Buffer
+  ): Promise<{ ok: boolean; detail: string }> {
     const addr = this.discoveredPeers.get(toPubKey) || this.learnedPeers.get(toPubKey);
     if (!addr) {
       this.log(`send to ${toPubKey.slice(0, 8)}…: no LAN address known → onion fallback`);
-      return false;
+      return { ok: false, detail: 'no address' };
     }
-    if (!this.mightReachOnLan(addr)) {
-      this.log(
-        `send to ${toPubKey.slice(0, 8)}…: ${addr.host}:${addr.port} not reachable (subnet/negative-cache) → onion fallback`
-      );
-      return false;
+    const key = `${addr.host}:${addr.port}`;
+    // mDNS-discovered and learned peers are, by definition, on the local network,
+    // so we just try to connect (no subnet pre-check — that was rejecting valid
+    // peers when os.networkInterfaces() reports family as a number, or on IPv6).
+    // The negative cache still avoids hammering a genuinely dead address.
+    const until = this.unreachable.get(key);
+    if (until && until > Date.now()) {
+      this.log(`send to ${toPubKey.slice(0, 8)}…: ${key} recently failed → onion fallback`);
+      return { ok: false, detail: `${key} cached-unreachable` };
     }
+    this.unreachable.delete(key);
+
     const ok = await this.sendFrame(addr, payload);
     this.log(
-      `send to ${toPubKey.slice(0, 8)}… over LAN ${addr.host}:${addr.port}: ${ok ? 'OK' : 'FAILED → onion fallback'}`
+      `send to ${toPubKey.slice(0, 8)}… over LAN ${key}: ${ok ? 'OK' : 'FAILED → onion fallback'}`
     );
-    return ok;
+    return { ok, detail: ok ? `${key}` : `${key} connect failed` };
   }
 
   // ---- internals ---------------------------------------------------------
@@ -288,18 +290,6 @@ class ApocentroLan extends EventEmitter {
     }
     const referer = (service as unknown as { referer?: { address?: string } }).referer;
     return referer?.address;
-  }
-
-  private mightReachOnLan(addr: PeerAddr): boolean {
-    const key = `${addr.host}:${addr.port}`;
-    const until = this.unreachable.get(key);
-    if (until && until > Date.now()) {
-      return false;
-    }
-    if (until) {
-      this.unreachable.delete(key);
-    }
-    return isOnALocalSubnet(addr.host);
   }
 
   private async startTcpServer(): Promise<void> {

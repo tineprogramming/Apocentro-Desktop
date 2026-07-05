@@ -128,19 +128,24 @@ const DurationLabel = () => {
 // while a call is connected.
 const StyledCallInfoOverlay = styled.div`
   position: absolute;
-  top: 6px;
-  left: 6px;
+  bottom: 8px;
+  left: 50%;
+  transform: translateX(-50%);
   z-index: 6;
-  padding: 6px 9px;
-  border-radius: 8px;
+  padding: 6px 12px;
+  border-radius: 10px;
   background: rgba(0, 0, 0, 0.55);
   color: var(--text-primary-color);
   font-size: 11px;
   line-height: 1.45;
   font-family: var(--font-mono, monospace);
   pointer-events: none;
-  max-width: 60%;
+  max-width: 90%;
   white-space: nowrap;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
 `;
 
 const StyledConnBadge = styled.div<{ $connected: boolean }>`
@@ -244,7 +249,10 @@ const ApocentroCallInfoOverlay = () => {
         {stats?.rttMs != null ? `${stats.rttMs} ms` : ''}
       </StyledConnBadge>
       <div>LAN peer: {lanReachable ? 'discovered ✓' : 'not discovered ✗'}</div>
-      <div>LAN send: {lanSend ? (lanSend.ok ? 'OK ✓' : 'failed ✗') : '—'}</div>
+      <div>
+        LAN send:{' '}
+        {lanSend ? `${lanSend.ok ? 'OK ✓' : 'failed ✗'} ${lanSend.detail}` : '—'}
+      </div>
       <div>state: {stats?.connectionState ?? '…'}</div>
       {stats?.remoteAddress && (
         <div>
