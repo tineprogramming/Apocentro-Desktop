@@ -95,6 +95,12 @@ class ApocentroLan extends EventEmitter {
   private unreachable = new Map<string, number>();
   private rotateTimer: NodeJS.Timeout | null = null;
 
+  private log(message: string): void {
+    // eslint-disable-next-line no-console
+    console.log(`[ApocentroLan] ${message}`);
+    this.emit('log', message);
+  }
+
   public async start(ourPubKey: string, contactPubKeys: Array<string>): Promise<void> {
     if (this.running) {
       this.updateContacts(contactPubKeys);
@@ -105,6 +111,11 @@ class ApocentroLan extends EventEmitter {
     this.rebuildTokenTables();
 
     await this.startTcpServer();
+    const ownToken = tokenFor(ourPubKey, currentEpoch());
+    this.log(
+      `start: me=${ourPubKey.slice(0, 8)}… token=${ownToken} tcpPort=${this.tcpPort} contacts=${contactPubKeys.length} ips=${ourIpv4s().join(',')}`
+    );
+
     this.bonjour = new Bonjour();
     this.advertise();
     this.startBrowsing();
@@ -165,12 +176,20 @@ class ApocentroLan extends EventEmitter {
   public async send(toPubKey: string, payload: Buffer): Promise<boolean> {
     const addr = this.discoveredPeers.get(toPubKey) || this.learnedPeers.get(toPubKey);
     if (!addr) {
+      this.log(`send to ${toPubKey.slice(0, 8)}…: no LAN address known → onion fallback`);
       return false;
     }
     if (!this.mightReachOnLan(addr)) {
+      this.log(
+        `send to ${toPubKey.slice(0, 8)}…: ${addr.host}:${addr.port} not reachable (subnet/negative-cache) → onion fallback`
+      );
       return false;
     }
-    return this.sendFrame(addr, payload);
+    const ok = await this.sendFrame(addr, payload);
+    this.log(
+      `send to ${toPubKey.slice(0, 8)}… over LAN ${addr.host}:${addr.port}: ${ok ? 'OK' : 'FAILED → onion fallback'}`
+    );
+    return ok;
   }
 
   // ---- internals ---------------------------------------------------------
@@ -201,6 +220,7 @@ class ApocentroLan extends EventEmitter {
       port: this.tcpPort,
       txt: { [ATTR_TOKEN]: token },
     });
+    this.log(`advertising _${SERVICE_TYPE}._tcp name=apocentro-${token} port=${this.tcpPort}`);
   }
 
   private startBrowsing(): void {
@@ -233,14 +253,25 @@ class ApocentroLan extends EventEmitter {
 
   private onServiceUp(service: Service): void {
     const token = this.tokenOf(service);
+    const host = this.pickIpv4(service);
+    const pubkey = token ? this.contactTokenIndex.get(token) : undefined;
+    this.log(
+      `discovered mDNS service name=${service.name} token=${token ?? '(none)'} host=${host ?? '?'}:${service.port ?? '?'} → ${
+        !token
+          ? 'IGNORED (no token)'
+          : pubkey && pubkey !== this.ourPubKey
+            ? `MATCH contact ${pubkey.slice(0, 8)}…`
+            : pubkey === this.ourPubKey
+              ? 'IGNORED (self)'
+              : 'IGNORED (not a contact / token mismatch)'
+      }`
+    );
     if (!token) {
       return;
     }
-    const pubkey = this.contactTokenIndex.get(token);
     if (!pubkey || pubkey === this.ourPubKey) {
       return; // not a known contact (contacts-only + unlinkable), or it's us
     }
-    const host = this.pickIpv4(service);
     if (!host || !service.port) {
       return;
     }
@@ -313,6 +344,7 @@ class ApocentroLan extends EventEmitter {
         host,
         senderPort,
       };
+      this.log(`incoming LAN frame from ${host}:${senderPort} (${len} bytes)`);
       this.emit('incoming', frame);
     });
   }

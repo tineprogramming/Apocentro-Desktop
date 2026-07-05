@@ -544,6 +544,9 @@ apocentroLan.on('peer', peer => {
 apocentroLan.on('incoming', frame => {
   mainWindow?.webContents.send('apocentro-lan:incoming', frame);
 });
+apocentroLan.on('log', (msg: string) => {
+  mainWindow?.webContents.send('apocentro-lan:log', msg);
+});
 ipc.handle('apocentro-lan:start', async (_event, ourPubKey: string, contactPubKeys: Array<string>) => {
   await apocentroLan.start(ourPubKey, contactPubKeys);
 });

@@ -53,9 +53,16 @@ export async function initApocentroLanCalling(): Promise<void> {
   }
   started = true;
 
+  window.apocentroLan.onLog(msg => {
+    window?.log?.info(`[ApocentroLan/main] ${msg}`);
+  });
+
   window.apocentroLan.onPeer(peer => {
     if (peer?.pubkey) {
       reachablePeers.add(peer.pubkey);
+      window?.log?.info(
+        `[ApocentroLan] peer reachable on LAN: ${peer.pubkey.slice(0, 8)}… at ${peer.host}:${peer.port}`
+      );
     }
   });
 
@@ -78,6 +85,9 @@ export async function initApocentroLanCalling(): Promise<void> {
 
   const ourPubKey = UserUtils.getOurPubKeyStrFromCache();
   const contacts = await getContactPubKeys();
+  window?.log?.info(
+    `[ApocentroLan] starting discovery: me=${ourPubKey.slice(0, 8)}… contacts=${contacts.length}`
+  );
   await window.apocentroLan.start(ourPubKey, contacts);
 }
 
@@ -105,8 +115,12 @@ export async function trySendCallSignalOverLan(rawMessage: OutgoingRawMessage): 
   }
   const pubkey = rawMessage.device;
   if (!isPeerReachableOnLan(pubkey)) {
+    window?.log?.info(
+      `[ApocentroLan] call signal to ${pubkey.slice(0, 8)}…: peer not discovered on LAN → onion`
+    );
     return false;
   }
+  window?.log?.info(`[ApocentroLan] call signal to ${pubkey.slice(0, 8)}…: trying LAN`);
   try {
     const [wrapped] = await MessageWrapper.encryptMessagesAndWrap([
       {

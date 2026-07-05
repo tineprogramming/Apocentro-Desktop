@@ -102,6 +102,7 @@ declare global {
       onIncoming: (
         cb: (frame: { payloadBase64: string; host: string; senderPort: number }) => void
       ) => void;
+      onLog: (cb: (msg: string) => void) => void;
     };
   }
 }
