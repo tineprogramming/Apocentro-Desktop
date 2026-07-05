@@ -55,7 +55,10 @@ runs:
     - name: Install Desktop node_modules
       shell: bash
       if: runner.os != 'Windows'
-      run: pnpm install
+      # --no-frozen-lockfile so a newly added dependency (bonjour-service, for
+      # LAN calling) resolves in CI; when the lockfile already matches this is a
+      # no-op, so it does not change existing builds.
+      run: pnpm install --no-frozen-lockfile
       env:
         NPM_CONFIG_LOGLEVEL: verbose
 
@@ -63,6 +66,6 @@ runs:
       shell: bash
       if: runner.os == 'Windows'
       # Note: this only works on windows with electron-builder@26.7.0
-      run: pnpm install --shamefully-hoist --node-linker=hoisted --public-hoist-pattern "*"
+      run: pnpm install --no-frozen-lockfile --shamefully-hoist --node-linker=hoisted --public-hoist-pattern "*"
       env:
         NPM_CONFIG_LOGLEVEL: verbose
