@@ -32,6 +32,7 @@ import { MessageQueue, MessageSender } from '../../sending';
 import { getIsRinging } from '../RingingManager';
 import { getBlackSilenceMediaStream } from './Silence';
 import { getApocentroIceServers } from './ApocentroCallConfig';
+import { trySendCallSignalOverLan } from './ApocentroLanCalling';
 import { ed25519Str } from '../String';
 import { WithMessageHash } from '../../types/with';
 import { NetworkTime } from '../../../util/NetworkTime';
@@ -405,11 +406,10 @@ async function createOfferAndSendIt(recipient: string, dbMessageIdentifier: stri
       });
 
       window.log.info(`sending '${offer.type}'' with callUUID: ${currentCallUUID}`);
-      const negotiationOfferSendResult = await MessageQueue.use().sendTo1o1NonDurably({
-        pubkey: PubKey.cast(recipient),
-        message: offerMessage,
-        namespace: SnodeNamespaces.Default,
-      });
+      const negotiationOfferSendResult = await apocentroSendCallTo1o1(
+        PubKey.cast(recipient),
+        offerMessage
+      );
       if (typeof negotiationOfferSendResult === 'number') {
         // window.log?.warn('setting last sent timestamp');
         lastOutgoingOfferTimestamp = negotiationOfferSendResult;
@@ -516,11 +516,14 @@ export async function USER_callRecipient(recipient: string) {
     preOfferMsg,
     SnodeNamespaces.Default
   );
-  await MessageSender.sendSingleMessage({
-    message: rawPreOffer,
-    isSyncMessage: false,
-    abortSignal: null,
-  });
+  // Apocentro: LAN-first for the pre-offer too, onion fallback.
+  if (!(await trySendCallSignalOverLan(rawPreOffer))) {
+    await MessageSender.sendSingleMessage({
+      message: rawPreOffer,
+      isSyncMessage: false,
+      abortSignal: null,
+    });
+  }
 
   await openMediaDevicesAndAddTracks();
   // Note CallMessages are very custom, as we mostly don't sync them to ourselves.
@@ -598,11 +601,7 @@ const iceSenderDebouncer = _.debounce(async (recipient: string) => {
     `sending ICE CANDIDATES MESSAGE to ${ed25519Str(recipient)} about call ${currentCallUUID}`
   );
 
-  await MessageQueue.use().sendTo1o1NonDurably({
-    pubkey: PubKey.cast(recipient),
-    message: callIceCandidates,
-    namespace: SnodeNamespaces.Default,
-  });
+  await apocentroSendCallTo1o1(PubKey.cast(recipient), callIceCandidates);
 }, 2000);
 
 const findLastMessageTypeFromSender = (sender: string, msgType: SignalService.CallMessage.Type) => {
@@ -981,18 +980,33 @@ export async function USER_rejectIncomingCallRequest(fromSender: string) {
   await addMissedCallMessage(fromSender, Date.now(), lastOfferMessage?.expireDetails || null);
 }
 
+/**
+ * Apocentro: send a 1:1 call signal LAN-first (same-Wi-Fi offline call setup),
+ * falling back to the onion/snode path when the peer isn't reachable on the LAN.
+ * Sync-to-self copies always use the snode path. Returns the same shape as
+ * MessageQueue.sendTo1o1NonDurably (an effective timestamp, or null).
+ */
+async function apocentroSendCallTo1o1(
+  pubkey: PubKey,
+  message: CallMessage
+): Promise<number | null> {
+  if (!UserUtils.isUsFromCache(pubkey.key)) {
+    const raw = MessageUtils.toRawMessage(pubkey, message, SnodeNamespaces.Default);
+    if (await trySendCallSignalOverLan(raw)) {
+      return NetworkTime.now();
+    }
+  }
+  return MessageQueue.use().sendTo1o1NonDurably({
+    pubkey,
+    message,
+    namespace: SnodeNamespaces.Default,
+  });
+}
+
 async function sendCallMessageAndSync(callMessage: CallMessage, user: string) {
   await Promise.all([
-    MessageQueue.use().sendTo1o1NonDurably({
-      pubkey: PubKey.cast(user),
-      message: callMessage,
-      namespace: SnodeNamespaces.Default,
-    }),
-    MessageQueue.use().sendTo1o1NonDurably({
-      pubkey: UserUtils.getOurPubKeyFromCache(),
-      message: callMessage,
-      namespace: SnodeNamespaces.Default,
-    }),
+    apocentroSendCallTo1o1(PubKey.cast(user), callMessage),
+    apocentroSendCallTo1o1(UserUtils.getOurPubKeyFromCache(), callMessage),
   ]);
 }
 
@@ -1019,11 +1033,7 @@ export async function USER_hangup(fromSender: string) {
     expireTimer,
     dbMessageIdentifier: uuidV4(),
   });
-  void MessageQueue.use().sendTo1o1NonDurably({
-    pubkey: PubKey.cast(fromSender),
-    message: endCallMessage,
-    namespace: SnodeNamespaces.Default,
-  });
+  void apocentroSendCallTo1o1(PubKey.cast(fromSender), endCallMessage);
 
   window.inboxStore?.dispatch(endCall());
   window.log.info('sending hangup with an END_CALL MESSAGE');

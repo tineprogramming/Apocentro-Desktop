@@ -1241,3 +1241,53 @@ async function handleDecryptedMessagesForSwarm(
     }
   }
 }
+
+/**
+ * Apocentro LAN calling: process a call-signalling payload received over the LAN
+ * (not the snode swarm). `wrappedPayload` is exactly what would have been stored
+ * on a snode for a 1o1 contact: magic-byte-wrapped libSession 1:1 ciphertext. We
+ * strip + decrypt + dispatch it through the *same* path as a polled 1o1 message,
+ * so CallManager sees the CallMessage identically. Returns the cryptographically
+ * verified sender pubkey (used to learn the peer for reply routing), or null if
+ * the payload is not a valid Apocentro 1:1 message.
+ */
+export async function handleApocentroLanCallBytes(
+  wrappedPayload: Uint8Array
+): Promise<string | null> {
+  try {
+    if (!hasMagicBytes(wrappedPayload)) {
+      return null;
+    }
+    const stripped = stripMagicBytes(wrappedPayload);
+    const ed25519PrivateKeyHex = (await UserUtils.getUserED25519KeyPair()).privKey.slice(0, 64);
+    const messageHash = `apocentro-lan-${uuidV4()}`;
+
+    const decryptedMessages = await MultiEncryptWrapperActions.decryptFor1o1(
+      [{ envelopePayload: stripped, messageHash }],
+      {
+        proBackendPubkeyHex: ProBackendAPI.getServer().server.edPkHex,
+        ed25519PrivateKeyHex,
+      }
+    );
+
+    const decrypted = decryptedMessages?.[0];
+    if (!decrypted?.decodedEnvelope?.contentPlaintextUnpadded?.length) {
+      return null;
+    }
+
+    await handleDecryptedMessagesForSwarm(
+      [{ hash: messageHash, expiration: NetworkTime.now() + 60 * 1000 }],
+      decryptedMessages,
+      null
+    );
+
+    return decrypted.decodedEnvelope.sessionId ?? null;
+  } catch (e) {
+    window?.log?.warn(
+      `[ApocentroLan] failed to handle LAN call bytes: ${
+        e instanceof Error ? e.message : String(e)
+      }`
+    );
+    return null;
+  }
+}
