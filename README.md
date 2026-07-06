@@ -1,120 +1,57 @@
-# Session Desktop
+# Apocentro Desktop
 
-[Download at getsession.org](https://getsession.org/download)
+**Apocentro Desktop** is a white‑label, closed‑ecosystem fork of
+[Session Desktop](https://github.com/session-foundation/session-desktop) (the
+Electron messenger). It speaks the real Session protocol — snodes, swarms, onion
+routing, storage RPC — but wraps every payload in **4 "magic bytes"** so only
+other **Apocentro** clients (desktop, web, Android) can read it. Session ↔
+Apocentro cannot interoperate, by design.
 
-## Summary
+> Built on Session Desktop. Not affiliated with or endorsed by the Session
+> Technology Foundation.
 
-Session integrates directly with [Oxen Service Nodes](https://docs.oxen.io/about-the-oxen-blockchain/oxen-service-nodes), which are a set of distributed, decentralized and Sybil resistant nodes. Service Nodes act as servers which store messages offline, and a set of nodes which allow for onion routing functionality obfuscating users IP Addresses. For a full understanding of how Session works, read the [Session Whitepaper](https://getsession.org/whitepaper).
+## Get it
 
-<br/>
-<br/>
-<img src="https://i.imgur.com/ydVhH00.png" alt="Screenshot of Session Desktop" />
+Builds are produced by CI (`.github/workflows/apocentro-build.yml`) as unsigned
+installers — **Windows** (NSIS `.exe`), **Linux** (`.AppImage` / `.deb`) and
+**macOS** (`.dmg`). Download them from the **Actions → latest run → Artifacts**
+section. (The builds are currently unsigned; the upstream Session
+signature‑verification flow does not apply.)
 
-## Want to Contribute? Found a Bug or Have a feature request?
+## What's different from Session
 
-Please search for any [existing issues](https://github.com/session-foundation/session-desktop/issues) that describe your bug or feature request to avoid duplicate submissions.
+- **Closed ecosystem** — the 4‑byte magic prefix (`APC` + v1) isolates Apocentro
+  traffic. See [`APOCENTRO_NOTES.md`](./APOCENTRO_NOTES.md).
+- **1:1 voice/video calling** — self‑hosted Cloudflare TURN, plus same‑Wi‑Fi
+  **LAN / offline** call signalling (ring + connect with no internet), an
+  Android‑style in‑call info overlay, and Windows‑firewall handling. See
+  [`APOCENTRO_DESKTOP_CALLING.md`](./APOCENTRO_DESKTOP_CALLING.md).
+- Full Apocentro rebrand (name, icons, strings) and group sub‑admin tweaks.
 
-Submissions can be made by making a pull request to our development branch.If you don't know where to start contributing please read [Contributing.md](CONTRIBUTING.md) and refer to issues tagged with the [good-first-issue](https://github.com/session-foundation/session-desktop/issues?q=is%3Aopen+is%3Aissue+label%3A%22good+first+issue%22) tag.
+### Apocentro docs
 
-## Supported platforms
+| Doc | What it covers |
+| --- | --- |
+| [`APOCENTRO_NOTES.md`](./APOCENTRO_NOTES.md) | **Read this first** — project handoff / orientation (all three clients, magic bytes, status). |
+| [`APOCENTRO_DESKTOP_CALLING.md`](./APOCENTRO_DESKTOP_CALLING.md) | Calling implementation — architecture, wire protocol, files, overlay, firewall. |
+| [`APOCENTRO_CHANGELOG.md`](./APOCENTRO_CHANGELOG.md) | Dated log of Apocentro‑specific changes. |
+| [`APOCENTRO_CALLING_ARCHITECTURE.md`](./APOCENTRO_CALLING_ARCHITECTURE.md) | Calling design & cost notes (background/rationale). |
 
-Check Session's system requirements and what platforms are supported [here](https://github.com/session-foundation/session-desktop/releases/latest#user-content-supported-platforms).
+## About Session (upstream)
+
+Session integrates directly with [Oxen Service Nodes](https://docs.oxen.io/about-the-oxen-blockchain/oxen-service-nodes),
+a set of distributed, decentralized and Sybil‑resistant nodes that store messages
+offline and provide onion routing to obfuscate users' IP addresses. For a full
+understanding of how the underlying protocol works, read the
+[Session Whitepaper](https://getsession.org/whitepaper).
 
 ## Build instructions
 
 Build instructions can be found in [Contributing.md](CONTRIBUTING.md).
 
-## Translations
-
-Want to help us translate Session into your language? You can do so at https://getsession.org/translate!
-
-## Verifying signatures
-
-**Step 1:**
-
-Add Jason's GPG key. Jason Rhinelander, a member of the [Session Technology Foundation](https://session.foundation/) and is the current signer for all Session Desktop releases. His GPG key can be found on his GitHub and other sources.
-
-```sh
-wget https://github.com/jagerman.gpg
-gpg --import jagerman.gpg
-```
-
-**Step 2:**
-
-Get the signed hashes for this release. `SESSION_VERSION` needs to be updated for the release you want to verify.
-
-```sh
-export SESSION_VERSION=1.15.0
-wget https://github.com/session-foundation/session-desktop/releases/download/v$SESSION_VERSION/signature.asc
-```
-
-**Step 3:**
-
-Verify the signature of the hashes of the files.
-
-```sh
-gpg --verify signature.asc 2>&1 |grep "Good signature from"
-```
-
-The command above should print "`Good signature from "Jason Rhinelander...`". If it does, the hashes are valid but we still have to make the sure the signed hashes match the downloaded files.
-
-**Step 4:**
-
-Make sure the two commands below return the same hash for the file you are checking. If they do, file is valid.
-
-<details>
-<summary>Linux</summary>
-
-```sh
-sha256sum session-desktop-linux-amd64-$SESSION_VERSION.deb
-grep .deb signature.asc
-```
-
-</details>
-
-<details>
-<summary>macOS</summary>
-
-**Apple Silicon**
-
-```sh
-sha256sum releases/session-desktop-mac-arm64-$SESSION_VERSION.dmg
-grep .dmg signature.asc
-```
-
-**Intel**
-
-```sh
-sha256sum releases/session-desktop-mac-x64-$SESSION_VERSION.dmg
-grep .dmg signature.asc
-```
-
-</details>
-
-<details>
-<summary>Windows</summary>
-
-**PowerShell**
-
-```PowerShell
-Get-FileHash -Algorithm SHA256 session-desktop-win-x64-$SESSION_VERSION.exe  # checksum is uppercase but should otherwise match
-Select-String -Pattern ".exe" signature.asc
-```
-
-**Bash**
-
-```sh
-sha256sum session-desktop-win-x64-$SESSION_VERSION.exe
-grep .exe signature.asc
-```
-
-</details>
-
-## Debian repository
-
-Please visit https://deb.oxen.io/
-
 ## License
+
+This project is a fork of Session Desktop and remains under the **GPLv3**.
 
 Copyright 2011 Whisper Systems
 
@@ -123,6 +60,8 @@ Copyright 2013-2017 Open Whisper Systems
 Copyright 2019-2024 The Oxen Project
 
 Copyright 2024-2025 Session Technology Foundation
+
+Copyright 2025 Apocentro (fork modifications)
 
 Licensed under the GPLv3: https://www.gnu.org/licenses/gpl-3.0.html
 
