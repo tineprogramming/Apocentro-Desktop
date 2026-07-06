@@ -516,14 +516,14 @@ export async function USER_callRecipient(recipient: string) {
     preOfferMsg,
     SnodeNamespaces.Default
   );
-  // Apocentro: LAN-first for the pre-offer too, onion fallback.
-  if (!(await trySendCallSignalOverLan(rawPreOffer))) {
-    await MessageSender.sendSingleMessage({
-      message: rawPreOffer,
-      isSyncMessage: false,
-      abortSignal: null,
-    });
-  }
+  // Apocentro: send the pre-offer over BOTH LAN (fast/offline) and onion
+  // (reliable), fire-and-forget, so the callee rings whichever path arrives.
+  void trySendCallSignalOverLan(rawPreOffer);
+  void MessageSender.sendSingleMessage({
+    message: rawPreOffer,
+    isSyncMessage: false,
+    abortSignal: null,
+  }).catch(() => null);
 
   await openMediaDevicesAndAddTracks();
   // Note CallMessages are very custom, as we mostly don't sync them to ourselves.
@@ -990,17 +990,20 @@ async function apocentroSendCallTo1o1(
   pubkey: PubKey,
   message: CallMessage
 ): Promise<number | null> {
+  // Fast/offline path: LAN (fire-and-forget; works with no internet).
   if (!UserUtils.isUsFromCache(pubkey.key)) {
     const raw = MessageUtils.toRawMessage(pubkey, message, SnodeNamespaces.Default);
-    if (await trySendCallSignalOverLan(raw)) {
-      return NetworkTime.now();
-    }
+    void trySendCallSignalOverLan(raw);
   }
-  return MessageQueue.use().sendTo1o1NonDurably({
-    pubkey,
-    message,
-    namespace: SnodeNamespaces.Default,
-  });
+  // Reliable path: ALSO send over onion (fire-and-forget so an unreachable snode
+  // can't block/hang the call, e.g. offline). Sending both — rather than
+  // LAN-or-onion — means the callee still gets the call when the LAN frame does
+  // not arrive/decode; it dedupes call signals by uuid. This is what made online
+  // calls reliable before the LAN path could "succeed" and skip onion.
+  void MessageQueue.use()
+    .sendTo1o1NonDurably({ pubkey, message, namespace: SnodeNamespaces.Default })
+    .catch(() => null);
+  return NetworkTime.now();
 }
 
 async function sendCallMessageAndSync(callMessage: CallMessage, user: string) {
