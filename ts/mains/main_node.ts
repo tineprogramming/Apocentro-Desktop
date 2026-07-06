@@ -601,6 +601,29 @@ ipc.handle('apocentro-firewall:add', async () => {
     return { ok: false, detail: e instanceof Error ? e.message : String(e) };
   }
 });
+// Windows: is our firewall allow-rule already present? Read-only (no elevation),
+// so the settings UI can show "already allowed" instead of prompting again. The
+// installer adds this rule automatically on install, so most users never need
+// the manual button.
+ipc.handle('apocentro-firewall:status', async () => {
+  if (process.platform !== 'win32') {
+    return { supported: false, exists: false };
+  }
+  try {
+    const exists = await new Promise<boolean>(resolve => {
+      const child = spawn(
+        'netsh advfirewall firewall show rule name="Apocentro Calls"',
+        { shell: true, windowsHide: true }
+      );
+      child.on('error', () => resolve(false));
+      // netsh exits 0 when a matching rule exists, 1 ("No rules match") otherwise.
+      child.on('exit', code => resolve(code === 0));
+    });
+    return { supported: true, exists };
+  } catch {
+    return { supported: true, exists: false };
+  }
+});
 ipc.handle('apocentro-lan:send', async (_event, toPubKey: string, payloadBase64: string) => {
   return apocentroLan.send(toPubKey, Buffer.from(payloadBase64, 'base64'));
 });

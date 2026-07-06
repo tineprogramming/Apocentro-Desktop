@@ -54,8 +54,11 @@ export const devSimpleNoArgs = {
   callsFirewallDescriptionDev:
     'Allow Apocentro through Windows Firewall so offline LAN calls can connect without turning the firewall off. Requires administrator approval once.',
   callsFirewallButtonDev: 'Allow',
+  callsFirewallAddedButtonDev: 'Allowed',
   callsFirewallDoneDev: 'Firewall exception added. Offline calls should now connect.',
   callsFirewallFailedDev: 'Could not add the firewall exception.',
+  callsFirewallEnabledDescriptionDev:
+    'Apocentro is already allowed through Windows Firewall, so offline LAN calls can connect.',
 } as const;
 
 export type TokenDevNoArgs = keyof typeof devSimpleNoArgs;

@@ -166,16 +166,30 @@ const StyledInfoItem = styled.span`
   white-space: nowrap;
 `;
 
-const StyledConnBadge = styled.div<{ $connected: boolean }>`
+// Badge colour reflects the connection type, like the Android overlay:
+//  - direct / local network → green
+//  - relayed via TURN        → orange
+//  - not yet connected       → neutral grey
+type BadgeVariant = 'direct' | 'relay' | 'idle';
+
+const badgeBg = (v: BadgeVariant) =>
+  v === 'direct'
+    ? 'rgba(0, 190, 100, 0.92)'
+    : v === 'relay'
+      ? 'rgba(240, 150, 20, 0.95)'
+      : 'var(--background-primary-color)';
+
+const badgeFg = (v: BadgeVariant) => (v === 'idle' ? 'var(--text-primary-color)' : '#0a0a0a');
+
+const StyledConnBadge = styled.div<{ $variant: BadgeVariant }>`
   display: inline-flex;
   align-items: center;
   gap: 5px;
   padding: 2px 9px;
   border-radius: 11px;
   font-weight: 600;
-  background: ${props =>
-    props.$connected ? 'rgba(0, 190, 100, 0.92)' : 'var(--background-primary-color)'};
-  color: ${props => (props.$connected ? '#04150c' : 'var(--text-primary-color)')};
+  background: ${props => badgeBg(props.$variant)};
+  color: ${props => badgeFg(props.$variant)};
 `;
 
 const StyledBars = styled.div`
@@ -185,26 +199,26 @@ const StyledBars = styled.div`
   height: 13px;
 `;
 
-const StyledBar = styled.div<{ $on: boolean; $h: number; $connected: boolean }>`
+const StyledBar = styled.div<{ $on: boolean; $h: number; $variant: BadgeVariant }>`
   width: 3px;
   height: ${props => props.$h}px;
   border-radius: 1px;
   background: ${props =>
     props.$on
-      ? props.$connected
-        ? '#04150c'
-        : 'var(--text-primary-color)'
-      : props.$connected
-        ? 'rgba(4, 21, 12, 0.3)'
-        : 'var(--text-secondary-color)'};
+      ? props.$variant === 'idle'
+        ? 'var(--text-primary-color)'
+        : 'rgba(10, 10, 10, 0.85)'
+      : props.$variant === 'idle'
+        ? 'var(--text-secondary-color)'
+        : 'rgba(10, 10, 10, 0.3)'};
 `;
 
-const SignalBars = ({ filled, connected }: { filled: number; connected: boolean }) => {
+const SignalBars = ({ filled, variant }: { filled: number; variant: BadgeVariant }) => {
   const heights = [5, 8, 11, 14];
   return (
     <StyledBars>
       {heights.map((h, i) => (
-        <StyledBar key={h} $h={h} $on={i < filled} $connected={connected} />
+        <StyledBar key={h} $h={h} $on={i < filled} $variant={variant} />
       ))}
     </StyledBars>
   );
@@ -258,6 +272,7 @@ const ApocentroCallInfoOverlay = () => {
   const isConnected = stats?.connectionState === 'connected';
   const isRelay = stats?.type === 'Relay';
   const badge = stats?.isLocalNetwork ? 'Local network' : (stats?.type ?? '…');
+  const badgeVariant: BadgeVariant = !isConnected ? 'idle' : isRelay ? 'relay' : 'direct';
   const remoteCountry = countryForIp(stats?.remoteAddress ?? null);
 
   // The address that best represents where we're connected: for a TURN call the
@@ -282,9 +297,9 @@ const ApocentroCallInfoOverlay = () => {
 
   return (
     <StyledCallInfoOverlay>
-      <StyledConnBadge $connected={isConnected}>
+      <StyledConnBadge $variant={badgeVariant}>
         {badge}
-        <SignalBars filled={barsForConnection(stats)} connected={isConnected} />
+        <SignalBars filled={barsForConnection(stats)} variant={badgeVariant} />
         {stats?.rttMs != null ? `${stats.rttMs} ms` : ''}
       </StyledConnBadge>
       {whereIp && (

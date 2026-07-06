@@ -1,3 +1,4 @@
+import { useCallback, useEffect, useState } from 'react';
 import useUpdate from 'react-use/lib/useUpdate';
 import { getAppDispatch } from '../../../../state/dispatch';
 
@@ -158,6 +159,18 @@ export function PrivacySettingsPage(modalState: UserSettingsModalState) {
 
   const forceUpdate = useUpdate();
 
+  // Windows firewall exception state, so we can show "Allowed" (disabled) once
+  // the rule exists instead of prompting for elevation again.
+  const [firewall, setFirewall] = useState<{ supported: boolean; exists: boolean } | null>(null);
+  const refreshFirewall = useCallback(async () => {
+    if (window.apocentroFirewallStatus) {
+      setFirewall(await window.apocentroFirewallStatus());
+    }
+  }, []);
+  useEffect(() => {
+    void refreshFirewall();
+  }, [refreshFirewall]);
+
   return (
     <UserSettingsModalContainer
       headerChildren={
@@ -193,17 +206,25 @@ export function PrivacySettingsPage(modalState: UserSettingsModalState) {
           text={{ token: 'callsDebugInfoDev' }}
           subText={{ token: 'callsDebugInfoDescriptionDev' }}
         />
-        {window.platform === 'win32' && window.apocentroAddFirewallRule ? (
+        {window.platform === 'win32' && window.apocentroAddFirewallRule && firewall?.supported ? (
           <SettingsPanelButtonInlineBasic
             baseDataTestId="add-firewall-rule"
             text={{ token: 'callsFirewallDev' }}
-            subText={{ token: 'callsFirewallDescriptionDev' }}
+            subText={{
+              token: firewall.exists
+                ? 'callsFirewallEnabledDescriptionDev'
+                : 'callsFirewallDescriptionDev',
+            }}
             buttonColor={SessionButtonColor.PrimaryDark}
-            buttonText={tr('callsFirewallButtonDev')}
+            buttonText={
+              firewall.exists ? tr('callsFirewallAddedButtonDev') : tr('callsFirewallButtonDev')
+            }
+            disabled={firewall.exists}
             onClick={async () => {
               const res = await window.apocentroAddFirewallRule?.();
               if (res?.ok) {
                 pushToastSuccess('apocentro-firewall', tr('callsFirewallDoneDev'));
+                await refreshFirewall();
               } else {
                 pushToastError('apocentro-firewall', tr('callsFirewallFailedDev'));
               }

@@ -24,8 +24,19 @@
   !define MUI_FINISHPAGE_SHOWREADME_FUNCTION AddToStartup
 !endif
 
+!macro customInstall
+  ; Apocentro: add a Windows Firewall inbound allow-rule for our executable so
+  ; offline LAN calls connect without the user disabling the firewall. The
+  ; installer already runs elevated, so netsh succeeds here. Delete any stale
+  ; rule of the same name first so re-installs don't stack duplicates.
+  nsExec::Exec 'netsh advfirewall firewall delete rule name="Apocentro Calls"'
+  nsExec::Exec 'netsh advfirewall firewall add rule name="Apocentro Calls" dir=in action=allow program="$INSTDIR\${PRODUCT_FILENAME}.exe" enable=yes profile=any'
+!macroend
+
 !macro customUnInstall
   ; Custom uninstall macro
   ; This runs during the uninstallation process
   Delete "$SMSTARTUP\${PRODUCT_FILENAME}.lnk"
+  ; Remove the firewall rule we added on install.
+  nsExec::Exec 'netsh advfirewall firewall delete rule name="Apocentro Calls"'
 !macroend

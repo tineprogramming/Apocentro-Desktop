@@ -113,5 +113,6 @@ declare global {
     // work without turning the firewall off. Resolves ok:false on other OSes or
     // if the UAC elevation is declined.
     apocentroAddFirewallRule?: () => Promise<{ ok: boolean; detail: string }>;
+    apocentroFirewallStatus?: () => Promise<{ supported: boolean; exists: boolean }>;
   }
 }

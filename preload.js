@@ -56,8 +56,9 @@ window.apocentroLan = {
   onLog: cb => ipc.on('apocentro-lan:log', (_e, msg) => cb(msg)),
   onStatus: cb => ipc.on('apocentro-lan:status', (_e, status) => cb(status)),
 };
-// Windows-only: add a Windows Firewall exception for offline LAN calls.
+// Windows-only: add / check a Windows Firewall exception for offline LAN calls.
 window.apocentroAddFirewallRule = () => ipc.invoke('apocentro-firewall:add');
+window.apocentroFirewallStatus = () => ipc.invoke('apocentro-firewall:status');
 window.getOSRelease = () =>
   `${os.type()} ${os.release()}, Node.js ${config.node_version} ${os.platform()} ${os.arch()}`;
 window.saveLog = () => ipc.send('export-logs');
