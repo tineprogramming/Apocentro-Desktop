@@ -562,6 +562,9 @@ ipc.on('apocentro-lan:update-contacts', (_event, contactPubKeys: Array<string>) 
 ipc.on('apocentro-lan:learn-peer', (_event, pubkey: string, host: string, port: number) => {
   apocentroLan.learnPeer(pubkey, host, port);
 });
+ipc.on('apocentro-lan:rediscover', () => {
+  apocentroLan.rediscover();
+});
 ipc.handle('apocentro-lan:send', async (_event, toPubKey: string, payloadBase64: string) => {
   return apocentroLan.send(toPubKey, Buffer.from(payloadBase64, 'base64'));
 });

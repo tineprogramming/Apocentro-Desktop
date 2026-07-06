@@ -29,6 +29,7 @@ import {
   getLastLanSendStatus,
   getLanServicesSeen,
 } from '../../session/utils/calling/ApocentroLanCalling';
+import { APOCENTRO_CALL_DEBUG_KEY } from '../../session/utils/calling/ApocentroCallConfig';
 
 import { useFormattedDuration } from '../../hooks/useFormattedDuration';
 import { SessionSpinner } from '../loading';
@@ -257,6 +258,20 @@ const ApocentroCallInfoOverlay = () => {
   const isConnected = stats?.connectionState === 'connected';
   const badge = stats?.isLocalNetwork ? 'Local network' : (stats?.type ?? '…');
   const remoteCountry = countryForIp(stats?.remoteAddress ?? null);
+
+  // Verbose LAN/ICE diagnostics are gated behind the "Show call connection
+  // details" setting (default on). When off, only the connection-type badge +
+  // signal bars + latency show — like the Android/phone view.
+  const showDebug = window.getSettingValue?.(APOCENTRO_CALL_DEBUG_KEY) !== false;
+
+  // While the call is still being set up, surface ICE progress the way the
+  // Android app does ("Handling Connection Candidates …") instead of nothing.
+  const settingUp = !isConnected && stats?.iceState !== 'completed';
+  const progress =
+    settingUp && stats
+      ? `Handling connection candidates ${stats.remoteCandidateCount}`
+      : null;
+
   return (
     <StyledCallInfoOverlay>
       <StyledConnBadge $connected={isConnected}>
@@ -264,23 +279,30 @@ const ApocentroCallInfoOverlay = () => {
         <SignalBars filled={barsForConnection(stats)} connected={isConnected} />
         {stats?.rttMs != null ? `${stats.rttMs} ms` : ''}
       </StyledConnBadge>
-      <StyledInfoItem>
-        LAN {lanReachable ? '✓' : '✗'} · mDNS {getLanServicesSeen()}
-      </StyledInfoItem>
-      <StyledInfoItem>
-        send {lanSend ? `${lanSend.ok ? '✓' : '✗'} ${lanSend.detail}` : '—'}
-      </StyledInfoItem>
-      <StyledInfoItem>state {stats?.connectionState ?? '…'}</StyledInfoItem>
-      {stats?.remoteAddress && (
-        <StyledInfoItem>
-          peer {remoteCountry ? `${remoteCountry.flag} ` : ''}
-          {stats.remoteAddress} ({stats.remoteCandidateType})
-        </StyledInfoItem>
-      )}
-      {stats?.localAddress && (
-        <StyledInfoItem>
-          you {stats.localAddress} ({stats.localCandidateType})
-        </StyledInfoItem>
+      {progress && <StyledInfoItem>{progress}</StyledInfoItem>}
+      {showDebug && (
+        <>
+          <StyledInfoItem>
+            LAN {lanReachable ? '✓' : '✗'} · mDNS {getLanServicesSeen()}
+          </StyledInfoItem>
+          <StyledInfoItem>
+            send {lanSend ? `${lanSend.ok ? '✓' : '✗'} ${lanSend.detail}` : '—'}
+          </StyledInfoItem>
+          <StyledInfoItem>
+            state {stats?.connectionState ?? '…'} · ice {stats?.iceState ?? '…'}
+          </StyledInfoItem>
+          {stats?.remoteAddress && (
+            <StyledInfoItem>
+              peer {remoteCountry ? `${remoteCountry.flag} ` : ''}
+              {stats.remoteAddress} ({stats.remoteCandidateType})
+            </StyledInfoItem>
+          )}
+          {stats?.localAddress && (
+            <StyledInfoItem>
+              you {stats.localAddress} ({stats.localCandidateType})
+            </StyledInfoItem>
+          )}
+        </>
       )}
     </StyledCallInfoOverlay>
   );

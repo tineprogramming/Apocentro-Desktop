@@ -199,6 +199,26 @@ class ApocentroLan extends EventEmitter {
     this.rebuildTokenTables();
   }
 
+  /**
+   * Force an immediate discovery burst: re-announce ourselves and re-issue the
+   * browse query right now, instead of waiting for the next periodic re-query.
+   * Called when a call is about to start so an online same-LAN peer is found
+   * (and the signal goes over the LAN) rather than falling back to slow onion.
+   */
+  public rediscover(): void {
+    if (!this.running) {
+      return;
+    }
+    this.advertise();
+    this.browsers.forEach(b => {
+      try {
+        (b as unknown as { update?: () => void }).update?.();
+      } catch {
+        /* ignore */
+      }
+    });
+  }
+
   /** Renderer calls this after it decrypts an inbound frame and learns the sender pubkey. */
   public learnPeer(pubkey: string, host: string, port: number): void {
     if (pubkey && host && port > 0) {

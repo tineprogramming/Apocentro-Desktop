@@ -168,6 +168,8 @@ export const enSimpleNoArgs = {
   callsVoiceAndVideoBeta: 'Voice and Video Calls',
   callsVoiceAndVideoModalDescription: 'Calls are end-to-end encrypted. Only your IP address may be visible to the person you are calling.',
   callsVoiceAndVideoToggleDescription: 'Calls are end-to-end encrypted. Only your IP address may be visible to the person you are calling.',
+  callsDebugInfo: 'Show call connection details',
+  callsDebugInfoDescription: 'Show LAN discovery, connection state and candidate details during a call. Turn off to show only the connection type, signal strength and latency.',
   cameraAccessDeniedMessage: 'Session needs access to your camera to enable video calls, but this permission has been denied. You can’t update your camera permissions during a call.<br/><br/>Would you like to end the call now and enable camera access, or would you like to be reminded after the call?',
   cameraAccessInstructions: 'To allow camera access, open settings and turn on the Camera permission.',
   cameraAccessReminderMessage: 'During your last call, you tried to use video but couldn’t because camera access was previously denied. To allow camera access, open settings and turn on the Camera permission.',

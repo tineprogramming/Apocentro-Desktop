@@ -97,6 +97,7 @@ declare global {
       stop: () => void;
       updateContacts: (contactPubKeys: Array<string>) => void;
       learnPeer: (pubkey: string, host: string, port: number) => void;
+      rediscover: () => void;
       send: (
         toPubKey: string,
         payloadBase64: string

@@ -32,7 +32,7 @@ import { MessageQueue, MessageSender } from '../../sending';
 import { getIsRinging } from '../RingingManager';
 import { getBlackSilenceMediaStream } from './Silence';
 import { getApocentroIceServers } from './ApocentroCallConfig';
-import { trySendCallSignalOverLan } from './ApocentroLanCalling';
+import { trySendCallSignalOverLan, ensurePeerDiscoveredOnLan } from './ApocentroLanCalling';
 import { ed25519Str } from '../String';
 import { WithMessageHash } from '../../types/with';
 import { NetworkTime } from '../../../util/NetworkTime';
@@ -494,6 +494,10 @@ export async function USER_callRecipient(recipient: string) {
   });
 
   window.log.info('Sending preOffer message to ', ed25519Str(recipient));
+  // Apocentro: give LAN discovery a moment so an online same-Wi-Fi peer is found
+  // before we send the first signal — otherwise the pre-offer races discovery and
+  // falls back to slow onion even when the peer is right there on the LAN.
+  await ensurePeerDiscoveredOnLan(recipient);
   const calledConvo = ConvoHub.use().get(recipient);
   calledConvo.setActiveAt(Date.now()); // addSingleOutgoingMessage does the commit for us on the convo
   await calledConvo.unhideIfNeeded(false);
@@ -1547,6 +1551,11 @@ export function getCurrentCallDuration() {
 // candidate). Read from the WebRTC stats of the active peer connection.
 export type ApocentroCallStats = {
   connectionState: string;
+  // WebRTC ICE progress, so the UI can show "Handling connection candidates…"
+  // like the Android app while the call is still being set up.
+  iceState: string;
+  remoteCandidateCount: number;
+  candidatePairCount: number;
   type: 'Direct' | 'Relay' | 'Unknown';
   isLocalNetwork: boolean;
   rttMs: number | null;
@@ -1578,19 +1587,30 @@ export async function getApocentroCallStats(): Promise<ApocentroCallStats | null
     const reports = await peerConnection.getStats();
     const byId = new Map<string, any>();
     let selectedPair: any = null;
+    let remoteCandidateCount = 0;
+    let candidatePairCount = 0;
     reports.forEach((report: any) => {
       byId.set(report.id, report);
     });
     reports.forEach((report: any) => {
-      if (report.type === 'candidate-pair' && (report.nominated || report.state === 'succeeded')) {
-        if (!selectedPair || report.selected || report.nominated) {
-          selectedPair = report;
+      if (report.type === 'remote-candidate') {
+        remoteCandidateCount += 1;
+      }
+      if (report.type === 'candidate-pair') {
+        candidatePairCount += 1;
+        if (report.nominated || report.state === 'succeeded') {
+          if (!selectedPair || report.selected || report.nominated) {
+            selectedPair = report;
+          }
         }
       }
     });
 
     const base: ApocentroCallStats = {
       connectionState: peerConnection.connectionState,
+      iceState: peerConnection.iceConnectionState,
+      remoteCandidateCount,
+      candidatePairCount,
       type: 'Unknown',
       isLocalNetwork: false,
       rttMs: null,

@@ -10,6 +10,11 @@
  * Mirrors Android `com.apocentro.calls.ApocentroCallConfig`.
  */
 
+// Settings key: when false, the in-call overlay is compact (connection type +
+// signal bars + latency only); when unset/true it shows the full LAN/ICE debug
+// details. Read by the settings toggle and the call overlay.
+export const APOCENTRO_CALL_DEBUG_KEY = 'apocentro-call-debug';
+
 // Public endpoint — mints only temporary creds, safe to hard-code (as on Android).
 const TURN_CREDENTIALS_URL = 'https://apocentro-turn-creds.none-reply.workers.dev';
 const TURN_TTL_SECONDS = 86400;

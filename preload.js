@@ -49,6 +49,7 @@ window.apocentroLan = {
   stop: () => ipc.send('apocentro-lan:stop'),
   updateContacts: contactPubKeys => ipc.send('apocentro-lan:update-contacts', contactPubKeys),
   learnPeer: (pubkey, host, port) => ipc.send('apocentro-lan:learn-peer', pubkey, host, port),
+  rediscover: () => ipc.send('apocentro-lan:rediscover'),
   send: (toPubKey, payloadBase64) => ipc.invoke('apocentro-lan:send', toPubKey, payloadBase64),
   onPeer: cb => ipc.on('apocentro-lan:peer', (_e, peer) => cb(peer)),
   onIncoming: cb => ipc.on('apocentro-lan:incoming', (_e, frame) => cb(frame)),

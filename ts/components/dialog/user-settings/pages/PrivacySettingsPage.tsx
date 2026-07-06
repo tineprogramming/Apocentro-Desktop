@@ -35,6 +35,7 @@ import { UserConfigWrapperActions } from '../../../../webworker/workers/browser/
 import { toggleGiphyIntegration } from '../actions/toggleGiphyIntegration';
 import { getFeatureFlag } from '../../../../state/ducks/types/releasedFeaturesReduxTypes';
 import { CallManager } from '../../../../session/utils';
+import { APOCENTRO_CALL_DEBUG_KEY } from '../../../../session/utils/calling/ApocentroCallConfig';
 
 // Apocentro: gates 1:1 voice/video calling (incl. LAN/offline calls). Enabling it
 // grants the media permission and turns on the call engine.
@@ -179,6 +180,17 @@ export function PrivacySettingsPage(modalState: UserSettingsModalState) {
           }}
           text={{ token: 'callsVoiceAndVideoBeta' }}
           subText={{ token: 'callsVoiceAndVideoToggleDescription' }}
+        />
+        <SettingsToggleBasic
+          baseDataTestId="enable-call-debug-info"
+          active={window.getSettingValue(APOCENTRO_CALL_DEBUG_KEY) !== false}
+          onClick={async () => {
+            const old = window.getSettingValue(APOCENTRO_CALL_DEBUG_KEY) !== false;
+            await window.setSettingValue(APOCENTRO_CALL_DEBUG_KEY, !old);
+            forceUpdate();
+          }}
+          text={{ token: 'callsDebugInfo' }}
+          subText={{ token: 'callsDebugInfoDescription' }}
         />
       </PanelButtonGroup>
       <PanelLabelWithDescription title={{ token: 'permissionsMicrophone' }} />

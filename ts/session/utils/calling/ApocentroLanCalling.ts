@@ -142,6 +142,44 @@ export function isPeerReachableOnLan(pubkey: string): boolean {
 }
 
 /**
+ * Give LAN discovery a brief head-start right before a call so an online,
+ * same-Wi-Fi peer is found (and signalling goes over the fast LAN path) instead
+ * of racing the call and falling back to slow onion. Resolves immediately if the
+ * peer is already known; otherwise it fires an active mDNS re-query and polls for
+ * up to `timeoutMs`. Skipped entirely when we've seen no mDNS at all (a genuinely
+ * remote call), so those aren't delayed.
+ */
+export async function ensurePeerDiscoveredOnLan(
+  pubkey: string,
+  timeoutMs = 1200
+): Promise<boolean> {
+  if (!window.apocentroLan || !isLanCallingEnabled()) {
+    return false;
+  }
+  if (isPeerReachableOnLan(pubkey)) {
+    return true;
+  }
+  // No mDNS services seen at all → multicast is blocked or nobody's around;
+  // don't delay a call that's almost certainly remote.
+  if (lanServicesSeen === 0) {
+    return false;
+  }
+  window.apocentroLan.rediscover();
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    // eslint-disable-next-line no-await-in-loop
+    await new Promise(resolve => setTimeout(resolve, 100));
+    if (isPeerReachableOnLan(pubkey)) {
+      window?.log?.info(
+        `[ApocentroLan] peer ${pubkey.slice(0, 8)}… discovered just-in-time for call`
+      );
+      return true;
+    }
+  }
+  return false;
+}
+
+/**
  * Try to deliver a call signal to `rawMessage.device` over the LAN. Produces the
  * exact same encrypted + magic-byte-wrapped bytes the snode path would, then
  * ships them via the main-process TCP channel. Returns false (→ caller falls back
