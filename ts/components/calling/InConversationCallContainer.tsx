@@ -166,20 +166,42 @@ const StyledInfoItem = styled.span`
   white-space: nowrap;
 `;
 
-// Badge colour reflects the connection type, like the Android overlay:
-//  - direct / local network → green
-//  - relayed via TURN        → orange
-//  - not yet connected       → neutral grey
-type BadgeVariant = 'direct' | 'relay' | 'idle';
+// Badge colour reflects CALL QUALITY (round-trip latency), which is what the
+// user actually cares about — "is this call going to be smooth?". The connection
+// TYPE (direct / relay) is shown as the badge *text*, not the colour, so a relay
+// call with fine latency is still green and only turns amber/red when latency is
+// genuinely poor. Thresholds match the signal bars (see barsForConnection).
+//  - good  (<150ms)   → green
+//  - ok    (150–300ms)→ amber
+//  - poor  (>300ms)   → red
+//  - idle  (connecting)→ neutral grey
+type BadgeVariant = 'good' | 'ok' | 'poor' | 'idle';
+
+function variantForStats(stats: ApocentroCallStats | null): BadgeVariant {
+  if (!stats || stats.connectionState !== 'connected') {
+    return 'idle';
+  }
+  const rtt = stats.rttMs;
+  if (rtt == null || rtt < 150) {
+    return 'good';
+  }
+  if (rtt < 300) {
+    return 'ok';
+  }
+  return 'poor';
+}
 
 const badgeBg = (v: BadgeVariant) =>
-  v === 'direct'
+  v === 'good'
     ? 'rgba(0, 190, 100, 0.92)'
-    : v === 'relay'
+    : v === 'ok'
       ? 'rgba(240, 150, 20, 0.95)'
-      : 'var(--background-primary-color)';
+      : v === 'poor'
+        ? 'rgba(230, 60, 50, 0.95)'
+        : 'var(--background-primary-color)';
 
-const badgeFg = (v: BadgeVariant) => (v === 'idle' ? 'var(--text-primary-color)' : '#0a0a0a');
+const badgeFg = (v: BadgeVariant) =>
+  v === 'idle' ? 'var(--text-primary-color)' : v === 'poor' ? '#ffffff' : '#0a0a0a';
 
 const StyledConnBadge = styled.div<{ $variant: BadgeVariant }>`
   display: inline-flex;
@@ -203,14 +225,16 @@ const StyledBar = styled.div<{ $on: boolean; $h: number; $variant: BadgeVariant 
   width: 3px;
   height: ${props => props.$h}px;
   border-radius: 1px;
-  background: ${props =>
-    props.$on
-      ? props.$variant === 'idle'
-        ? 'var(--text-primary-color)'
-        : 'rgba(10, 10, 10, 0.85)'
-      : props.$variant === 'idle'
+  background: ${props => {
+    const onColor = props.$variant === 'idle' ? 'var(--text-primary-color)' : badgeFg(props.$variant);
+    const offColor =
+      props.$variant === 'idle'
         ? 'var(--text-secondary-color)'
-        : 'rgba(10, 10, 10, 0.3)'};
+        : props.$variant === 'poor'
+          ? 'rgba(255, 255, 255, 0.35)'
+          : 'rgba(10, 10, 10, 0.3)';
+    return props.$on ? onColor : offColor;
+  }};
 `;
 
 const SignalBars = ({ filled, variant }: { filled: number; variant: BadgeVariant }) => {
@@ -272,7 +296,8 @@ const ApocentroCallInfoOverlay = () => {
   const isConnected = stats?.connectionState === 'connected';
   const isRelay = stats?.type === 'Relay';
   const badge = stats?.isLocalNetwork ? 'Local network' : (stats?.type ?? '…');
-  const badgeVariant: BadgeVariant = !isConnected ? 'idle' : isRelay ? 'relay' : 'direct';
+  // Colour by latency (quality); the text above already says the type.
+  const badgeVariant = variantForStats(stats);
   const remoteCountry = countryForIp(stats?.remoteAddress ?? null);
 
   // The address that best represents where we're connected: for a TURN call the
