@@ -16,14 +16,18 @@ It speaks the real Session protocol (snodes, swarms, onion routing, storage RPC)
 but wraps every snode‑bound payload in **4 "magic bytes"** so that only other
 Apocentro clients can read it — Session ↔ Apocentro cannot interoperate, by design.
 
-There are **three clients**, each its own repo, all on branch
-**`claude/apocentro-web-recovery-q13fec`**:
+There are **three clients**, each its own repo:
 
-| Repo | Role | Tech |
-| --- | --- | --- |
-| `tineprogramming/session-web` | **Apocentro Web** (the original, most complete) | React + Vite + TS, libsodium‑wasm, Bun proxy |
-| `quanturtle-founder/apocentro-android` | **Apocentro Android** (reference implementation for the protocol) | Kotlin, fork of session‑android |
-| `tineprogramming/session-desktop` | **Apocentro Desktop** (most recent work) | Electron, fork of session‑desktop |
+| Repo | Role | Tech | Main branch |
+| --- | --- | --- | --- |
+| `tineprogramming/session-web` | **Apocentro Web** (the original, most complete) | React + Vite + TS, libsodium‑wasm, Bun proxy | `claude/apocentro-web-recovery-q13fec` |
+| `quanturtle-founder/apocentro-android` | **Apocentro Android** (reference implementation for the protocol) | Kotlin, fork of session‑android | `claude/apocentro-web-recovery-q13fec` |
+| `tineprogramming/session-desktop` | **Apocentro Desktop** (most recent work) | Electron, fork of session‑desktop | **`apocentro-desktop`** (default) |
+
+> ⚠️ **Desktop's main branch was renamed** from the auto‑generated
+> `claude/apocentro-web-recovery-q13fec` to **`apocentro-desktop`** (now the repo
+> default). Web and Android are still on the old name. Branch from
+> `apocentro-desktop` for new desktop work.
 
 The three are interoperable because **all three wrap the same layer** — the output
 of libsession's `encodeFor1o1` / `encodeForGroup` — with the same magic bytes.
@@ -58,14 +62,32 @@ Reference implementations:
 
 ---
 
-## 3. session-desktop — status (the repo with the active PR)
+## 3. session-desktop — status
 
-**Open PR:** `tineprogramming/session-desktop#1` (draft, base `dev`).
+**Main branch:** **`apocentro-desktop`** (repo default). **PR #2** (Cloudflare
+TURN + LAN/offline calling) is **MERGED** here; PR #1 (the earlier rebrand +
+magic bytes) landed before it.
 **CI:** `.github/workflows/apocentro-build.yml` builds unsigned installers
 (Linux AppImage + deb, Windows NSIS, mac dmg) and uploads them as run artifacts.
 **It is GREEN.** Download installers from the latest run's "Artifacts" section.
 
-### What was done (commits, newest first)
+### 1:1 Calling (newest work — see `APOCENTRO_DESKTOP_CALLING.md` + `APOCENTRO_CHANGELOG.md`)
+- ✅ **TURN**: Cloudflare TURN Worker creds per call + STUN fallback (not coturn).
+- ✅ **LAN / offline calls**: same‑Wi‑Fi ring + connect with no internet, via
+  main‑process mDNS (`_apocentro._tcp`, contacts‑only rotating token) + a TCP
+  signalling channel; LAN‑first with onion fallback. Android‑wire‑compatible.
+- ✅ **In‑call overlay**: connection badge coloured by **latency** (green/amber/
+  red), type as text, signal bars, peer IP + country flag (offline GeoLite2,
+  rendered with the bundled NotoColorEmoji font), "Handling connection
+  candidates" progress, and a "Show call connection details" toggle.
+- ✅ **Windows firewall**: installer adds the inbound allow‑rule automatically;
+  Settings has a status‑aware "Allow"/"Allowed" button.
+- ✅ Restored the "Voice and Video Calls" toggle; fixed a crash on Wi‑Fi change.
+- Key files: `ts/session/utils/calling/{CallManager,ApocentroLanCalling,ApocentroCallConfig,ApocentroGeo}.ts`,
+  `ts/mains/apocentro_lan.ts`, `ts/mains/main_node.ts`, `preload.js`,
+  `ts/components/calling/InConversationCallContainer.tsx`, `build/installer.nsh`.
+
+### Rebrand / protocol (earlier work — commits, newest first)
 - Group sub-admin: surface "promote member to admin" for group admins (was hidden
   behind upstream's `useClosedGroupV2QAButtons` QA flag) + add a no-demote
   confirmation. See `APOCENTRO_GROUP_SUBADMIN.md`.
@@ -157,8 +179,10 @@ These were the source for the desktop icons/brand art.
 
 ## 6. How to continue
 
-1. **Pick the repo** for the task; everything is on `claude/apocentro-web-recovery-q13fec`.
-2. For desktop: the PR is #1; CI builds installers automatically on push.
+1. **Pick the repo** for the task. Desktop's main branch is **`apocentro-desktop`**;
+   web and android are still on `claude/apocentro-web-recovery-q13fec`.
+2. For desktop: PR #2 (calling) is merged into `apocentro-desktop`; CI builds
+   installers automatically on push. Branch new desktop work off `apocentro-desktop`.
 3. **Never break the magic-bytes invariant** — it is what makes the three clients
    a closed ecosystem. If you change wrapping on one client, change all three.
 4. The biggest open feature is **Groups v2 on web** (section 4).
@@ -169,11 +193,15 @@ These were the source for the desktop icons/brand art.
 
 - **Apocentro** = fork ของแอป Session แบบ "ระบบปิด" — ห่อข้อความด้วย magic bytes 4 ไบต์
   (`APC` + v1) ให้คุยกันได้เฉพาะ Apocentro ด้วยกัน (web / android / desktop)
-- มี **3 repo** ทุกตัวอยู่ branch `claude/apocentro-web-recovery-q13fec`
-- **Desktop (ล่าสุด):** rebrand เป็น Apocentro ครบ (ชื่อ/ไอคอน/string/ลบ Session ออกหมด:
-  donate, voice-video beta, token logo, Session Network), magic-bytes interop ใช้ได้,
-  มี **GitHub Action build installer ให้อัตโนมัติ (เขียวแล้ว)** — โหลด .AppImage/.exe/.dmg
-  จากหน้า Actions → run ล่าสุด → Artifacts. PR คือ **#1**
+- มี **3 repo**: **desktop อยู่ branch `apocentro-desktop`** (default ใหม่),
+  ส่วน web กับ android ยังอยู่ `claude/apocentro-web-recovery-q13fec`
+- **Desktop (ล่าสุด):** rebrand เป็น Apocentro ครบ (ชื่อ/ไอคอน/string/ลบ Session ออกหมด),
+  magic-bytes interop ใช้ได้, มี GitHub Action build installer อัตโนมัติ (เขียวแล้ว)
+- **Desktop — โทร 1:1 (งานล่าสุด, PR #2 merged แล้ว):** โทรออนไลน์ผ่าน TURN (Cloudflare),
+  โทร **offline/LAN วง wifi เดียวกันได้ไม่ต้องมีเน็ต** (mDNS + TCP, LAN‑first fallback onion),
+  แถบข้อมูลในสาย: **สีตาม latency** (เขียว/ส้ม/แดง) + ประเภทการต่อ + IP + ธงประเทศ + ปุ่มเปิด/ปิด
+  รายละเอียด, **Windows firewall** ตั้งอัตโนมัติจาก installer + ปุ่มใน settings, แก้ crash ตอนเปลี่ยน wifi.
+  ดู `APOCENTRO_DESKTOP_CALLING.md` + `APOCENTRO_CHANGELOG.md`
 - **ของที่ยังไม่เสร็จ:** วิดีโอ HEVC เปิดในแอปไม่เห็นภาพ (ข้อจำกัด Electron ไม่ใช่บั๊ก,
   download ได้), code signing, และฝั่ง **web ยังเหลือ Groups v2 (Phase 3)**
 - **ห้ามแก้ magic bytes ให้ผิดเพี้ยน** — ถ้าแก้ที่ client นึงต้องแก้ให้ตรงกันทั้ง 3
