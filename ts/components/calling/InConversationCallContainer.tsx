@@ -52,6 +52,16 @@ const InConvoCallWindow = styled.div`
   flex-grow: 1;
 `;
 
+// Column wrapper so the Apocentro call-info bar takes real space above the call
+// window instead of floating over it.
+const StyledCallColumn = styled.div`
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
+  flex-shrink: 1;
+  min-height: 80px;
+`;
+
 const RelativeCallWindow = styled.div`
   position: relative;
   height: 100%;
@@ -126,23 +136,25 @@ const DurationLabel = () => {
 // Apocentro: on-screen call diagnostics (connection type, latency, selected
 // local/remote candidate + state), like the Android call debug overlay. Shown
 // while a call is connected.
+// A real status bar that sits above the call window (part of the layout, not an
+// overlay), so it never covers the video, avatar or controls.
 const StyledCallInfoOverlay = styled.div`
-  position: absolute;
-  top: 4px;
-  left: 4px; // top-left corner so it never covers the centered call controls or avatar
-  z-index: 6;
-  padding: 4px 7px;
-  border-radius: 7px;
-  background: rgba(0, 0, 0, 0.45);
+  width: 100%;
+  box-sizing: border-box;
+  flex-shrink: 0;
+  padding: 5px 10px;
+  background: var(--background-secondary-color);
   color: var(--text-primary-color);
-  font-size: 10px;
-  line-height: 1.4;
+  border-bottom: 1px solid var(--border-color);
+  font-size: 11px;
+  line-height: 1.45;
   font-family: var(--font-mono, monospace);
-  pointer-events: none;
-  max-width: 46%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
   white-space: nowrap;
   overflow: hidden;
-  text-overflow: ellipsis;
 `;
 
 const StyledConnBadge = styled.div<{ $connected: boolean }>`
@@ -336,13 +348,14 @@ export const InConversationCallContainer = () => {
   }
 
   return (
-    <InConvoCallWindow>
-      <RelativeCallWindow>
-        <RingingLabel />
-        <ConnectingLabel />
-        <DurationLabel />
-        <ApocentroCallInfoOverlay />
-        <VideoContainer>
+    <StyledCallColumn>
+      <ApocentroCallInfoOverlay />
+      <InConvoCallWindow>
+        <RelativeCallWindow>
+          <RingingLabel />
+          <ConnectingLabel />
+          <DurationLabel />
+          <VideoContainer>
           <VideoLoadingSpinner fullWidth={false} />
           <StyledVideoElement
             ref={videoRefRemote}
@@ -379,7 +392,8 @@ export const InConversationCallContainer = () => {
           remoteStreamVideoIsMuted={remoteStreamVideoIsMuted}
           isFullScreen={false}
         />
-      </RelativeCallWindow>
-    </InConvoCallWindow>
+        </RelativeCallWindow>
+      </InConvoCallWindow>
+    </StyledCallColumn>
   );
 };
