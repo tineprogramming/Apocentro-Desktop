@@ -189,8 +189,8 @@ export function PrivacySettingsPage(modalState: UserSettingsModalState) {
             await window.setSettingValue(APOCENTRO_CALL_DEBUG_KEY, !old);
             forceUpdate();
           }}
-          text={{ token: 'callsDebugInfo' }}
-          subText={{ token: 'callsDebugInfoDescription' }}
+          text={{ token: 'callsDebugInfoDev' }}
+          subText={{ token: 'callsDebugInfoDescriptionDev' }}
         />
       </PanelButtonGroup>
       <PanelLabelWithDescription title={{ token: 'permissionsMicrophone' }} />

@@ -45,6 +45,11 @@ export const devSimpleNoArgs = {
   // gifs
   searchForGifs: 'Search for gifs',
   giphyIntegrationDescription: 'Enable giphy integration in Session',
+
+  // Apocentro calling
+  callsDebugInfoDev: 'Show call connection details',
+  callsDebugInfoDescriptionDev:
+    'Show LAN discovery, connection state and candidate details during a call. Turn off to show only the connection type, signal strength and latency.',
 } as const;
 
 export type TokenDevNoArgs = keyof typeof devSimpleNoArgs;

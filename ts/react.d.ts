@@ -84,6 +84,7 @@ declare module 'react' {
 
   export type SettingsToggles =
     | 'enable-calls'
+    | 'enable-call-debug-info'
     | 'enable-microphone'
     | 'enable-communities-message-requests'
     | 'enable-read-receipts'
