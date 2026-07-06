@@ -166,6 +166,13 @@ const StyledInfoItem = styled.span`
   white-space: nowrap;
 `;
 
+// The overlay text uses a monospace stack, which on Windows has no country-flag
+// glyphs (the flag emoji renders as its 2-letter code). Force the bundled
+// NotoColorEmoji font — which does include flags — for the flag glyph only.
+const StyledFlag = styled.span`
+  font-family: 'NotoColorEmoji', var(--font-mono, monospace);
+`;
+
 // Badge colour reflects CALL QUALITY (round-trip latency), which is what the
 // user actually cares about — "is this call going to be smooth?". The connection
 // TYPE (direct / relay) is shown as the badge *text*, not the colour, so a relay
@@ -330,7 +337,7 @@ const ApocentroCallInfoOverlay = () => {
       {whereIp && (
         <StyledInfoItem>
           {isRelay ? 'Relay · ' : ''}
-          {whereCountry ? `${whereCountry.flag} ` : ''}
+          {whereCountry ? <StyledFlag>{whereCountry.flag} </StyledFlag> : ''}
           {whereIp}
         </StyledInfoItem>
       )}
@@ -348,7 +355,7 @@ const ApocentroCallInfoOverlay = () => {
           </StyledInfoItem>
           {stats?.remoteAddress && (
             <StyledInfoItem>
-              peer {remoteCountry ? `${remoteCountry.flag} ` : ''}
+              peer {remoteCountry ? <StyledFlag>{remoteCountry.flag} </StyledFlag> : ''}
               {stats.remoteAddress} ({stats.remoteCandidateType})
             </StyledInfoItem>
           )}
