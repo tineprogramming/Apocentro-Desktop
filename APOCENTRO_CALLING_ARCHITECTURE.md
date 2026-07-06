@@ -8,6 +8,17 @@
 
 ---
 
+> ## ✅ STATUS — planning/cost doc; **1:1 is now implemented on desktop**
+> The recommendations below are largely **done**. Notably: TURN is served by our
+> **Cloudflare TURN Worker** (not self‑hosted coturn); the calls toggle is
+> **restored**; and **LAN‑offline call setup is built** (it was marked "defer"
+> here). For what actually shipped and how, read
+> [`APOCENTRO_DESKTOP_CALLING.md`](./APOCENTRO_DESKTOP_CALLING.md) and
+> [`APOCENTRO_CHANGELOG.md`](./APOCENTRO_CHANGELOG.md). Group calling is still a
+> future item. Treat this file as background/rationale.
+
+---
+
 ## 0. TL;DR / Recommendation
 
 | Topic | Recommendation |
