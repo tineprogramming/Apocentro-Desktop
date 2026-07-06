@@ -146,7 +146,7 @@ const StyledCallInfoOverlay = styled.div`
   padding: 5px 10px;
   background: var(--background-secondary-color);
   color: var(--text-primary-color);
-  border-top: 1px solid var(--border-color);
+  border-bottom: 1px solid var(--border-color);
   font-size: 11px;
   line-height: 1.45;
   font-family: var(--font-mono, monospace);
@@ -353,6 +353,7 @@ export const InConversationCallContainer = () => {
 
   return (
     <StyledCallColumn>
+      <ApocentroCallInfoOverlay />
       <InConvoCallWindow>
         <RelativeCallWindow>
           <RingingLabel />
@@ -397,7 +398,6 @@ export const InConversationCallContainer = () => {
         />
         </RelativeCallWindow>
       </InConvoCallWindow>
-      <ApocentroCallInfoOverlay />
     </StyledCallColumn>
   );
 };
