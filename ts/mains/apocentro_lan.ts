@@ -93,6 +93,8 @@ class ApocentroLan extends EventEmitter {
   private unreachable = new Map<string, number>();
   private rotateTimer: NodeJS.Timeout | null = null;
   private rebrowseTimer: NodeJS.Timeout | null = null;
+  private netWatchTimer: NodeJS.Timeout | null = null;
+  private currentIps: Array<string> = [];
 
   private log(message: string): void {
     // eslint-disable-next-line no-console
@@ -115,16 +117,29 @@ class ApocentroLan extends EventEmitter {
       `start: me=${ourPubKey.slice(0, 8)}… token=${ownToken} tcpPort=${this.tcpPort} contacts=${contactPubKeys.length} ips=${ourIpv4s().join(',')}`
     );
 
-    const ips = ourIpv4s();
+    this.currentIps = ourIpv4s();
     // Create one instance bound to each interface; fall back to a default
-    // instance if we can't enumerate any IPv4.
-    const optsList: Array<Record<string, unknown>> = ips.length
-      ? ips.map(ip => ({ interface: ip }))
+    // instance if we can't enumerate any IPv4. IMPORTANT: pass an error callback
+    // — without one, bonjour-service rethrows mDNS socket errors (e.g. a dgram
+    // EADDRNOTAVAIL when the Wi-Fi changes and an interface IP disappears), which
+    // crashes the whole app. With it, we just log and keep running.
+    const optsList: Array<Record<string, unknown>> = this.currentIps.length
+      ? this.currentIps.map(ip => ({ interface: ip }))
       : [{}];
-    this.bonjours = optsList.map(opts => new Bonjour(opts));
-    this.log(`created ${this.bonjours.length} mDNS instance(s) on: ${ips.join(', ') || 'default'}`);
+    this.bonjours = optsList.map(
+      opts =>
+        new Bonjour(opts, (err: Error) => this.log(`mDNS socket error (ignored): ${err.message}`))
+    );
+    this.log(
+      `created ${this.bonjours.length} mDNS instance(s) on: ${this.currentIps.join(', ') || 'default'}`
+    );
     this.advertise();
     this.startBrowsing();
+
+    // Watch for network changes (Wi-Fi switch): when our interface set changes,
+    // rebuild the mDNS instances so we bind the new interface and stop touching
+    // the old (now-invalid) one.
+    this.netWatchTimer = setInterval(() => this.checkNetworkChange(), 5_000);
 
     // Re-advertise + rebuild the contact index each hour when the token rotates.
     this.rotateTimer = setInterval(() => {
@@ -144,6 +159,10 @@ class ApocentroLan extends EventEmitter {
     if (this.rebrowseTimer) {
       clearInterval(this.rebrowseTimer);
       this.rebrowseTimer = null;
+    }
+    if (this.netWatchTimer) {
+      clearInterval(this.netWatchTimer);
+      this.netWatchTimer = null;
     }
     this.browsers.forEach(b => {
       try {
@@ -228,6 +247,47 @@ class ApocentroLan extends EventEmitter {
     }
   }
 
+  private checkNetworkChange(): void {
+    if (!this.running) {
+      return;
+    }
+    const ips = ourIpv4s();
+    const changed =
+      ips.length !== this.currentIps.length || ips.some(ip => !this.currentIps.includes(ip));
+    if (!changed) {
+      return;
+    }
+    this.log(`network changed: [${this.currentIps.join(',')}] → [${ips.join(',')}], rebuilding mDNS`);
+    this.browsers.forEach(b => {
+      try {
+        b.stop();
+      } catch {
+        /* ignore */
+      }
+    });
+    this.browsers = [];
+    this.bonjours.forEach(bonjour => {
+      try {
+        bonjour.destroy();
+      } catch {
+        /* ignore */
+      }
+    });
+    this.bonjours = [];
+    this.publisheds = [];
+    this.discoveredPeers.clear();
+    this.currentIps = ips;
+    const optsList: Array<Record<string, unknown>> = ips.length
+      ? ips.map(ip => ({ interface: ip }))
+      : [{}];
+    this.bonjours = optsList.map(
+      opts =>
+        new Bonjour(opts, (err: Error) => this.log(`mDNS socket error (ignored): ${err.message}`))
+    );
+    this.advertise();
+    this.startBrowsing();
+  }
+
   private advertise(): void {
     if (!this.bonjours.length || !this.ourPubKey) {
       return;
@@ -254,6 +314,10 @@ class ApocentroLan extends EventEmitter {
   private startBrowsing(): void {
     if (!this.bonjours.length) {
       return;
+    }
+    if (this.rebrowseTimer) {
+      clearInterval(this.rebrowseTimer);
+      this.rebrowseTimer = null;
     }
     this.browsers = this.bonjours.map(bonjour => {
       const browser = bonjour.find({ type: SERVICE_TYPE });

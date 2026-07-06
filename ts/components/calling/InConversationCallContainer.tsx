@@ -53,16 +53,6 @@ const InConvoCallWindow = styled.div`
   flex-grow: 1;
 `;
 
-// Column wrapper so the Apocentro call-info bar takes real space above the call
-// window instead of floating over it.
-const StyledCallColumn = styled.div`
-  display: flex;
-  flex-direction: column;
-  flex-grow: 1;
-  flex-shrink: 1;
-  min-height: 80px;
-`;
-
 const RelativeCallWindow = styled.div`
   position: relative;
   height: 100%;
@@ -135,27 +125,33 @@ const DurationLabel = () => {
 };
 
 // Apocentro: on-screen call diagnostics (connection type, latency, selected
-// local/remote candidate + state), like the Android call debug overlay. Shown
-// while a call is connected.
-// A real status bar that sits above the call window (part of the layout, not an
-// overlay), so it never covers the video, avatar or controls.
+// local/remote candidate + state), like the Android call debug overlay.
+//
+// It sits at the TOP-CENTRE of the call window, grouped with the ringing /
+// connecting / duration labels (i.e. "part of the timer"), NOT at the bottom
+// where the call controls live. Crucially it is `pointer-events: none`, so even
+// if a pixel ever overlapped a control it can never intercept a click — the
+// buttons stay fully usable.
 const StyledCallInfoOverlay = styled.div`
-  width: 100%;
+  position: absolute;
+  top: 6px;
+  left: 50%;
+  transform: translateX(-50%);
+  max-width: 94%;
   box-sizing: border-box;
-  flex-shrink: 0;
-  padding: 5px 10px;
-  background: var(--background-secondary-color);
-  color: var(--text-primary-color);
-  border-bottom: 1px solid var(--border-color);
+  z-index: 5;
+  pointer-events: none;
+  padding: 5px 12px;
+  border-radius: 10px;
+  background: rgba(0, 0, 0, 0.55);
+  color: #ffffff;
   font-size: 11px;
-  line-height: 1.45;
+  line-height: 1.4;
   font-family: var(--font-mono, monospace);
   display: flex;
   flex-direction: column;
   align-items: center;
   text-align: center;
-  white-space: nowrap;
-  overflow: hidden;
 `;
 
 const StyledConnBadge = styled.div<{ $connected: boolean }>`
@@ -167,8 +163,8 @@ const StyledConnBadge = styled.div<{ $connected: boolean }>`
   font-weight: 600;
   margin-bottom: 4px;
   background: ${props =>
-    props.$connected ? 'rgba(0, 190, 100, 0.92)' : 'rgba(255, 255, 255, 0.14)'};
-  color: ${props => (props.$connected ? '#04150c' : 'var(--text-primary-color)')};
+    props.$connected ? 'rgba(0, 190, 100, 0.92)' : 'rgba(255, 255, 255, 0.16)'};
+  color: ${props => (props.$connected ? '#04150c' : '#ffffff')};
 `;
 
 const StyledBars = styled.div`
@@ -186,10 +182,10 @@ const StyledBar = styled.div<{ $on: boolean; $h: number; $connected: boolean }>`
     props.$on
       ? props.$connected
         ? '#04150c'
-        : 'var(--text-primary-color)'
+        : '#ffffff'
       : props.$connected
         ? 'rgba(4, 21, 12, 0.3)'
-        : 'rgba(255, 255, 255, 0.25)'};
+        : 'rgba(255, 255, 255, 0.3)'};
 `;
 
 const SignalBars = ({ filled, connected }: { filled: number; connected: boolean }) => {
@@ -352,13 +348,12 @@ export const InConversationCallContainer = () => {
   }
 
   return (
-    <StyledCallColumn>
-      <ApocentroCallInfoOverlay />
-      <InConvoCallWindow>
-        <RelativeCallWindow>
-          <RingingLabel />
-          <ConnectingLabel />
-          <DurationLabel />
+    <InConvoCallWindow>
+      <RelativeCallWindow>
+        <ApocentroCallInfoOverlay />
+        <RingingLabel />
+        <ConnectingLabel />
+        <DurationLabel />
           <VideoContainer>
           <VideoLoadingSpinner fullWidth={false} />
           <StyledVideoElement
@@ -396,8 +391,7 @@ export const InConversationCallContainer = () => {
           remoteStreamVideoIsMuted={remoteStreamVideoIsMuted}
           isFullScreen={false}
         />
-        </RelativeCallWindow>
-      </InConvoCallWindow>
-    </StyledCallColumn>
+      </RelativeCallWindow>
+    </InConvoCallWindow>
   );
 };
