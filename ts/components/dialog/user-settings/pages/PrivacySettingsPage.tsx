@@ -36,6 +36,7 @@ import { toggleGiphyIntegration } from '../actions/toggleGiphyIntegration';
 import { getFeatureFlag } from '../../../../state/ducks/types/releasedFeaturesReduxTypes';
 import { CallManager } from '../../../../session/utils';
 import { APOCENTRO_CALL_DEBUG_KEY } from '../../../../session/utils/calling/ApocentroCallConfig';
+import { pushToastSuccess, pushToastError } from '../../../../session/utils/Toast';
 
 // Apocentro: gates 1:1 voice/video calling (incl. LAN/offline calls). Enabling it
 // grants the media permission and turns on the call engine.
@@ -192,6 +193,23 @@ export function PrivacySettingsPage(modalState: UserSettingsModalState) {
           text={{ token: 'callsDebugInfoDev' }}
           subText={{ token: 'callsDebugInfoDescriptionDev' }}
         />
+        {window.platform === 'win32' && window.apocentroAddFirewallRule ? (
+          <SettingsPanelButtonInlineBasic
+            baseDataTestId="add-firewall-rule"
+            text={{ token: 'callsFirewallDev' }}
+            subText={{ token: 'callsFirewallDescriptionDev' }}
+            buttonColor={SessionButtonColor.PrimaryDark}
+            buttonText={tr('callsFirewallButtonDev')}
+            onClick={async () => {
+              const res = await window.apocentroAddFirewallRule?.();
+              if (res?.ok) {
+                pushToastSuccess('apocentro-firewall', tr('callsFirewallDoneDev'));
+              } else {
+                pushToastError('apocentro-firewall', tr('callsFirewallFailedDev'));
+              }
+            }}
+          />
+        ) : null}
       </PanelButtonGroup>
       <PanelLabelWithDescription title={{ token: 'permissionsMicrophone' }} />
       <PanelButtonGroup>

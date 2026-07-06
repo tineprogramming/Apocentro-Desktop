@@ -256,12 +256,20 @@ const ApocentroCallInfoOverlay = () => {
   const lanReachable = ongoingCallPubkey ? isPeerReachableOnLan(ongoingCallPubkey) : false;
   const lanSend = getLastLanSendStatus();
   const isConnected = stats?.connectionState === 'connected';
+  const isRelay = stats?.type === 'Relay';
   const badge = stats?.isLocalNetwork ? 'Local network' : (stats?.type ?? '…');
   const remoteCountry = countryForIp(stats?.remoteAddress ?? null);
 
+  // The address that best represents where we're connected: for a TURN call the
+  // relay's public IP (our local 'relay' candidate), otherwise the remote peer.
+  // Shown always, like the Android "Cloudflare relay · 🇺🇸 <ip>" / "<flag> <ip>"
+  // line, with an offline country flag from the local GeoLite2 db.
+  const whereIp = isRelay ? (stats?.localAddress ?? stats?.remoteAddress) : stats?.remoteAddress;
+  const whereCountry = countryForIp(whereIp ?? null);
+
   // Verbose LAN/ICE diagnostics are gated behind the "Show call connection
   // details" setting (default on). When off, only the connection-type badge +
-  // signal bars + latency show — like the Android/phone view.
+  // signal bars + latency + the peer IP/country show — like the Android/phone view.
   const showDebug = window.getSettingValue?.(APOCENTRO_CALL_DEBUG_KEY) !== false;
 
   // While the call is still being set up, surface ICE progress the way the
@@ -279,6 +287,13 @@ const ApocentroCallInfoOverlay = () => {
         <SignalBars filled={barsForConnection(stats)} connected={isConnected} />
         {stats?.rttMs != null ? `${stats.rttMs} ms` : ''}
       </StyledConnBadge>
+      {whereIp && (
+        <StyledInfoItem>
+          {isRelay ? 'Relay · ' : ''}
+          {whereCountry ? `${whereCountry.flag} ` : ''}
+          {whereIp}
+        </StyledInfoItem>
+      )}
       {progress && <StyledInfoItem>{progress}</StyledInfoItem>}
       {showDebug && (
         <>

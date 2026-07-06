@@ -111,6 +111,7 @@ declare module 'react' {
     | 'change-password'
     | 'remove-password'
     | 'export-logs'
+    | 'add-firewall-rule'
     | 'hide-recovery-password';
   type SettingsExternalLinkButtons =
     | 'faq'

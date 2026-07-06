@@ -109,5 +109,9 @@ declare global {
       onLog: (cb: (msg: string) => void) => void;
       onStatus: (cb: (status: { servicesSeen: number }) => void) => void;
     };
+    // Apocentro (Windows): add a Windows Firewall exception so offline LAN calls
+    // work without turning the firewall off. Resolves ok:false on other OSes or
+    // if the UAC elevation is declined.
+    apocentroAddFirewallRule?: () => Promise<{ ok: boolean; detail: string }>;
   }
 }
