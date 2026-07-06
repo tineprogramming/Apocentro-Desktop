@@ -53,6 +53,17 @@ const InConvoCallWindow = styled.div`
   flex-grow: 1;
 `;
 
+// Flex column: the Apocentro info bar is a REAL sibling above the call window
+// (not an absolute overlay), so the call controls live in the window *below* it
+// and can never be covered, whatever the pane height.
+const StyledCallColumn = styled.div`
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
+  flex-shrink: 1;
+  min-height: 80px;
+`;
+
 const RelativeCallWindow = styled.div`
   position: relative;
   height: 100%;
@@ -127,31 +138,31 @@ const DurationLabel = () => {
 // Apocentro: on-screen call diagnostics (connection type, latency, selected
 // local/remote candidate + state), like the Android call debug overlay.
 //
-// It sits at the TOP-CENTRE of the call window, grouped with the ringing /
-// connecting / duration labels (i.e. "part of the timer"), NOT at the bottom
-// where the call controls live. Crucially it is `pointer-events: none`, so even
-// if a pixel ever overlapped a control it can never intercept a click — the
-// buttons stay fully usable.
+// This is a REAL bar that sits above the call window as a flex sibling (see
+// StyledCallColumn) — NOT an absolute overlay. It therefore takes its own
+// vertical space and pushes the video + call controls down below it, so it can
+// never cover the buttons. It is kept compact (a single wrapping row) so it
+// doesn't eat the call window.
 const StyledCallInfoOverlay = styled.div`
-  position: absolute;
-  top: 6px;
-  left: 50%;
-  transform: translateX(-50%);
-  max-width: 94%;
+  width: 100%;
   box-sizing: border-box;
-  z-index: 5;
-  pointer-events: none;
-  padding: 5px 12px;
-  border-radius: 10px;
-  background: rgba(0, 0, 0, 0.55);
-  color: #ffffff;
+  flex-shrink: 0;
+  padding: 5px 10px;
+  background: var(--background-secondary-color);
+  color: var(--text-primary-color);
+  border-bottom: 1px solid var(--border-color);
   font-size: 11px;
   line-height: 1.4;
   font-family: var(--font-mono, monospace);
   display: flex;
-  flex-direction: column;
+  flex-flow: row wrap;
   align-items: center;
-  text-align: center;
+  justify-content: center;
+  gap: 3px 10px;
+`;
+
+const StyledInfoItem = styled.span`
+  white-space: nowrap;
 `;
 
 const StyledConnBadge = styled.div<{ $connected: boolean }>`
@@ -161,10 +172,9 @@ const StyledConnBadge = styled.div<{ $connected: boolean }>`
   padding: 2px 9px;
   border-radius: 11px;
   font-weight: 600;
-  margin-bottom: 4px;
   background: ${props =>
-    props.$connected ? 'rgba(0, 190, 100, 0.92)' : 'rgba(255, 255, 255, 0.16)'};
-  color: ${props => (props.$connected ? '#04150c' : '#ffffff')};
+    props.$connected ? 'rgba(0, 190, 100, 0.92)' : 'var(--background-primary-color)'};
+  color: ${props => (props.$connected ? '#04150c' : 'var(--text-primary-color)')};
 `;
 
 const StyledBars = styled.div`
@@ -182,10 +192,10 @@ const StyledBar = styled.div<{ $on: boolean; $h: number; $connected: boolean }>`
     props.$on
       ? props.$connected
         ? '#04150c'
-        : '#ffffff'
+        : 'var(--text-primary-color)'
       : props.$connected
         ? 'rgba(4, 21, 12, 0.3)'
-        : 'rgba(255, 255, 255, 0.3)'};
+        : 'var(--text-secondary-color)'};
 `;
 
 const SignalBars = ({ filled, connected }: { filled: number; connected: boolean }) => {
@@ -254,25 +264,23 @@ const ApocentroCallInfoOverlay = () => {
         <SignalBars filled={barsForConnection(stats)} connected={isConnected} />
         {stats?.rttMs != null ? `${stats.rttMs} ms` : ''}
       </StyledConnBadge>
-      <div>
-        LAN peer: {lanReachable ? 'discovered ✓' : 'not discovered ✗'} · mDNS seen:{' '}
-        {getLanServicesSeen()}
-      </div>
-      <div>
-        LAN send:{' '}
-        {lanSend ? `${lanSend.ok ? 'OK ✓' : 'failed ✗'} ${lanSend.detail}` : '—'}
-      </div>
-      <div>state: {stats?.connectionState ?? '…'}</div>
+      <StyledInfoItem>
+        LAN {lanReachable ? '✓' : '✗'} · mDNS {getLanServicesSeen()}
+      </StyledInfoItem>
+      <StyledInfoItem>
+        send {lanSend ? `${lanSend.ok ? '✓' : '✗'} ${lanSend.detail}` : '—'}
+      </StyledInfoItem>
+      <StyledInfoItem>state {stats?.connectionState ?? '…'}</StyledInfoItem>
       {stats?.remoteAddress && (
-        <div>
-          peer: {remoteCountry ? `${remoteCountry.flag} ` : ''}
+        <StyledInfoItem>
+          peer {remoteCountry ? `${remoteCountry.flag} ` : ''}
           {stats.remoteAddress} ({stats.remoteCandidateType})
-        </div>
+        </StyledInfoItem>
       )}
       {stats?.localAddress && (
-        <div>
-          you: {stats.localAddress} ({stats.localCandidateType})
-        </div>
+        <StyledInfoItem>
+          you {stats.localAddress} ({stats.localCandidateType})
+        </StyledInfoItem>
       )}
     </StyledCallInfoOverlay>
   );
@@ -348,12 +356,13 @@ export const InConversationCallContainer = () => {
   }
 
   return (
-    <InConvoCallWindow>
-      <RelativeCallWindow>
-        <ApocentroCallInfoOverlay />
-        <RingingLabel />
-        <ConnectingLabel />
-        <DurationLabel />
+    <StyledCallColumn>
+      <ApocentroCallInfoOverlay />
+      <InConvoCallWindow>
+        <RelativeCallWindow>
+          <RingingLabel />
+          <ConnectingLabel />
+          <DurationLabel />
           <VideoContainer>
           <VideoLoadingSpinner fullWidth={false} />
           <StyledVideoElement
@@ -391,7 +400,8 @@ export const InConversationCallContainer = () => {
           remoteStreamVideoIsMuted={remoteStreamVideoIsMuted}
           isFullScreen={false}
         />
-      </RelativeCallWindow>
-    </InConvoCallWindow>
+        </RelativeCallWindow>
+      </InConvoCallWindow>
+    </StyledCallColumn>
   );
 };
