@@ -20,6 +20,7 @@ import {
 } from 'electron';
 
 import crypto from 'crypto';
+import { spawn } from 'child_process';
 import fs from 'fs';
 import os from 'os';
 import path, { join } from 'path';
@@ -28,6 +29,8 @@ import url from 'url';
 import { configDotenv } from 'dotenv';
 
 import _, { isEmpty, isNumber, isFinite } from 'lodash';
+
+import { apocentroLan } from './apocentro_lan';
 
 import { addHandler } from '../node/global_errors';
 import { setup as setupSpellChecker } from '../node/spell_check';
@@ -531,6 +534,98 @@ async function createWindow() {
 
 ipc.on('show-window', () => {
   showWindow();
+});
+
+// Apocentro LAN calling: bridge the main-process net/mDNS transport to the
+// renderer (CallManager). The renderer produces the encrypted + magic-byte
+// wrapped 1:1 payload; this side only moves opaque bytes over the LAN.
+apocentroLan.on('peer', peer => {
+  mainWindow?.webContents.send('apocentro-lan:peer', peer);
+});
+apocentroLan.on('incoming', frame => {
+  mainWindow?.webContents.send('apocentro-lan:incoming', frame);
+});
+apocentroLan.on('log', (msg: string) => {
+  mainWindow?.webContents.send('apocentro-lan:log', msg);
+});
+apocentroLan.on('status', (status: { servicesSeen: number }) => {
+  mainWindow?.webContents.send('apocentro-lan:status', status);
+});
+ipc.handle('apocentro-lan:start', async (_event, ourPubKey: string, contactPubKeys: Array<string>) => {
+  await apocentroLan.start(ourPubKey, contactPubKeys);
+});
+ipc.on('apocentro-lan:stop', () => {
+  apocentroLan.stop();
+});
+ipc.on('apocentro-lan:update-contacts', (_event, contactPubKeys: Array<string>) => {
+  apocentroLan.updateContacts(contactPubKeys);
+});
+ipc.on('apocentro-lan:learn-peer', (_event, pubkey: string, host: string, port: number) => {
+  apocentroLan.learnPeer(pubkey, host, port);
+});
+ipc.on('apocentro-lan:rediscover', () => {
+  apocentroLan.rediscover();
+});
+// Windows: add an inbound Windows Firewall allow-rule for our own executable so
+// offline LAN calls work without the user disabling the firewall. One program
+// rule covers the LAN TCP signalling listener, WebRTC UDP media and mDNS. We
+// elevate via a single UAC prompt (Start-Process -Verb RunAs); declining it just
+// returns ok:false.
+ipc.handle('apocentro-firewall:add', async () => {
+  if (process.platform !== 'win32') {
+    return { ok: false, detail: 'not-windows' };
+  }
+  try {
+    const exe = process.execPath.replace(/'/g, "''"); // escape for the PS string
+    const ruleName = 'Apocentro Calls';
+    const cmdLine =
+      `netsh advfirewall firewall delete rule name="${ruleName}" >nul 2>&1 & ` +
+      `netsh advfirewall firewall add rule name="${ruleName}" dir=in action=allow ` +
+      `program="${exe}" enable=yes profile=any`;
+    const psCommand =
+      `Start-Process -FilePath cmd.exe -Verb RunAs -WindowStyle Hidden -Wait ` +
+      `-ArgumentList '/c','${cmdLine}'`;
+    await new Promise<void>((resolve, reject) => {
+      const child = spawn(
+        'powershell.exe',
+        ['-NoProfile', '-WindowStyle', 'Hidden', '-Command', psCommand],
+        { windowsHide: true }
+      );
+      child.on('error', reject);
+      child.on('exit', code =>
+        code === 0 ? resolve() : reject(new Error(`firewall helper exited ${code} (declined?)`))
+      );
+    });
+    return { ok: true, detail: 'added' };
+  } catch (e) {
+    return { ok: false, detail: e instanceof Error ? e.message : String(e) };
+  }
+});
+// Windows: is our firewall allow-rule already present? Read-only (no elevation),
+// so the settings UI can show "already allowed" instead of prompting again. The
+// installer adds this rule automatically on install, so most users never need
+// the manual button.
+ipc.handle('apocentro-firewall:status', async () => {
+  if (process.platform !== 'win32') {
+    return { supported: false, exists: false };
+  }
+  try {
+    const exists = await new Promise<boolean>(resolve => {
+      const child = spawn(
+        'netsh advfirewall firewall show rule name="Apocentro Calls"',
+        { shell: true, windowsHide: true }
+      );
+      child.on('error', () => resolve(false));
+      // netsh exits 0 when a matching rule exists, 1 ("No rules match") otherwise.
+      child.on('exit', code => resolve(code === 0));
+    });
+    return { supported: true, exists };
+  } catch {
+    return { supported: true, exists: false };
+  }
+});
+ipc.handle('apocentro-lan:send', async (_event, toPubKey: string, payloadBase64: string) => {
+  return apocentroLan.send(toPubKey, Buffer.from(payloadBase64, 'base64'));
 });
 
 ipc.on('set-release-from-file-server', (_event, releaseInfoFromFileServer) => {

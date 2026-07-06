@@ -90,5 +90,29 @@ declare global {
     setZoomFactor: (newZoom: number) => void;
     updateZoomFactor: () => void;
     getUserKeys: () => Promise<{ id: string; vbid: string }>;
+
+    // Apocentro LAN calling: bridge to the main-process net/mDNS transport (see preload.js).
+    apocentroLan?: {
+      start: (ourPubKey: string, contactPubKeys: Array<string>) => Promise<void>;
+      stop: () => void;
+      updateContacts: (contactPubKeys: Array<string>) => void;
+      learnPeer: (pubkey: string, host: string, port: number) => void;
+      rediscover: () => void;
+      send: (
+        toPubKey: string,
+        payloadBase64: string
+      ) => Promise<{ ok: boolean; detail: string }>;
+      onPeer: (cb: (peer: { pubkey: string; host: string; port: number }) => void) => void;
+      onIncoming: (
+        cb: (frame: { payloadBase64: string; host: string; senderPort: number }) => void
+      ) => void;
+      onLog: (cb: (msg: string) => void) => void;
+      onStatus: (cb: (status: { servicesSeen: number }) => void) => void;
+    };
+    // Apocentro (Windows): add a Windows Firewall exception so offline LAN calls
+    // work without turning the firewall off. Resolves ok:false on other OSes or
+    // if the UAC elevation is declined.
+    apocentroAddFirewallRule?: () => Promise<{ ok: boolean; detail: string }>;
+    apocentroFirewallStatus?: () => Promise<{ supported: boolean; exists: boolean }>;
   }
 }

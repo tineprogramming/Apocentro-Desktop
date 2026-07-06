@@ -31,6 +31,8 @@ import { ReadyToDisappearMsgUpdate } from '../../disappearing_messages/types';
 import { MessageQueue, MessageSender } from '../../sending';
 import { getIsRinging } from '../RingingManager';
 import { getBlackSilenceMediaStream } from './Silence';
+import { getApocentroIceServers } from './ApocentroCallConfig';
+import { trySendCallSignalOverLan, ensurePeerDiscoveredOnLan } from './ApocentroLanCalling';
 import { ed25519Str } from '../String';
 import { WithMessageHash } from '../../types/with';
 import { NetworkTime } from '../../../util/NetworkTime';
@@ -136,48 +138,9 @@ let ignoreOffer = false;
 let isSettingRemoteAnswerPending = false;
 let lastOutgoingOfferTimestamp = -Infinity;
 
-/**
- * This array holds all of the ice servers Session can contact.
- * They are all contacted at the same time, so before triggering the request, we get only a subset of those, randomly
- */
-const iceServersFullArray = [
-  {
-    urls: 'turn:freyr.getsession.org',
-    username: 'session202111',
-    credential: '053c268164bc7bd7',
-  },
-  // excluding those two (fenrir & frigg) as they are TCP only for now
-  // {
-  //   urls: 'turn:fenrir.getsession.org',
-  //   username: 'session202111',
-  //   credential: '053c268164bc7bd7',
-  // },
-  // {
-  //   urls: 'turn:frigg.getsession.org',
-  //   username: 'session202111',
-  //   credential: '053c268164bc7bd7',
-  // },
-  {
-    urls: 'turn:angus.getsession.org',
-    username: 'session202111',
-    credential: '053c268164bc7bd7',
-  },
-  {
-    urls: 'turn:hereford.getsession.org',
-    username: 'session202111',
-    credential: '053c268164bc7bd7',
-  },
-  {
-    urls: 'turn:holstein.getsession.org',
-    username: 'session202111',
-    credential: '053c268164bc7bd7',
-  },
-  {
-    urls: 'turn:brahman.getsession.org',
-    username: 'session202111',
-    credential: '053c268164bc7bd7',
-  },
-];
+// Apocentro: ICE servers are fetched at call time from our own Cloudflare TURN
+// Worker (see ./ApocentroCallConfig), replacing Session's hard-coded
+// *.getsession.org TURN. Direct P2P is preferred; TURN is only a relay fallback.
 
 const configuration: RTCConfiguration = {
   bundlePolicy: 'max-bundle',
@@ -443,11 +406,10 @@ async function createOfferAndSendIt(recipient: string, dbMessageIdentifier: stri
       });
 
       window.log.info(`sending '${offer.type}'' with callUUID: ${currentCallUUID}`);
-      const negotiationOfferSendResult = await MessageQueue.use().sendTo1o1NonDurably({
-        pubkey: PubKey.cast(recipient),
-        message: offerMessage,
-        namespace: SnodeNamespaces.Default,
-      });
+      const negotiationOfferSendResult = await apocentroSendCallTo1o1(
+        PubKey.cast(recipient),
+        offerMessage
+      );
       if (typeof negotiationOfferSendResult === 'number') {
         // window.log?.warn('setting last sent timestamp');
         lastOutgoingOfferTimestamp = negotiationOfferSendResult;
@@ -520,7 +482,7 @@ export async function USER_callRecipient(recipient: string) {
   }
   currentCallUUID = uuidv4();
   const justCreatedCallUUID = currentCallUUID;
-  peerConnection = createOrGetPeerConnection(recipient);
+  peerConnection = await createOrGetPeerConnection(recipient);
   // send a pre offer just to wake up the device on the remote side
   const preOfferMsg = new CallMessage({
     createAtNetworkTimestamp: NetworkTime.now(),
@@ -532,6 +494,10 @@ export async function USER_callRecipient(recipient: string) {
   });
 
   window.log.info('Sending preOffer message to ', ed25519Str(recipient));
+  // Apocentro: give LAN discovery a moment so an online same-Wi-Fi peer is found
+  // before we send the first signal — otherwise the pre-offer races discovery and
+  // falls back to slow onion even when the peer is right there on the LAN.
+  await ensurePeerDiscoveredOnLan(recipient);
   const calledConvo = ConvoHub.use().get(recipient);
   calledConvo.setActiveAt(Date.now()); // addSingleOutgoingMessage does the commit for us on the convo
   await calledConvo.unhideIfNeeded(false);
@@ -554,11 +520,14 @@ export async function USER_callRecipient(recipient: string) {
     preOfferMsg,
     SnodeNamespaces.Default
   );
-  await MessageSender.sendSingleMessage({
-    message: rawPreOffer,
-    isSyncMessage: false,
-    abortSignal: null,
-  });
+  // Apocentro: LAN-first for the pre-offer too, onion fallback (never both).
+  if (!(await trySendCallSignalOverLan(rawPreOffer))) {
+    await MessageSender.sendSingleMessage({
+      message: rawPreOffer,
+      isSyncMessage: false,
+      abortSignal: null,
+    });
+  }
 
   await openMediaDevicesAndAddTracks();
   // Note CallMessages are very custom, as we mostly don't sync them to ourselves.
@@ -636,11 +605,7 @@ const iceSenderDebouncer = _.debounce(async (recipient: string) => {
     `sending ICE CANDIDATES MESSAGE to ${ed25519Str(recipient)} about call ${currentCallUUID}`
   );
 
-  await MessageQueue.use().sendTo1o1NonDurably({
-    pubkey: PubKey.cast(recipient),
-    message: callIceCandidates,
-    namespace: SnodeNamespaces.Default,
-  });
+  await apocentroSendCallTo1o1(PubKey.cast(recipient), callIceCandidates);
 }, 2000);
 
 const findLastMessageTypeFromSender = (sender: string, msgType: SignalService.CallMessage.Type) => {
@@ -778,13 +743,13 @@ function onDataChannelOnOpen() {
   sendVideoStatusViaDataChannel();
 }
 
-function createOrGetPeerConnection(withPubkey: string) {
+async function createOrGetPeerConnection(withPubkey: string) {
   if (peerConnection) {
     return peerConnection;
   }
   remoteStream = new MediaStream();
-  const sampleOfICeServers = _.sampleSize(iceServersFullArray, 2);
-  peerConnection = new RTCPeerConnection({ ...configuration, iceServers: sampleOfICeServers });
+  const iceServers = await getApocentroIceServers();
+  peerConnection = new RTCPeerConnection({ ...configuration, iceServers });
   dataChannel = peerConnection.createDataChannel('session-datachannel', {
     ordered: true,
     negotiated: true,
@@ -880,7 +845,7 @@ export async function USER_acceptIncomingCallRequest(fromSender: string) {
   }
   currentCallUUID = lastOfferMessage.uuid;
 
-  peerConnection = createOrGetPeerConnection(fromSender);
+  peerConnection = await createOrGetPeerConnection(fromSender);
 
   await openMediaDevicesAndAddTracks();
 
@@ -1019,18 +984,35 @@ export async function USER_rejectIncomingCallRequest(fromSender: string) {
   await addMissedCallMessage(fromSender, Date.now(), lastOfferMessage?.expireDetails || null);
 }
 
+/**
+ * Apocentro: send a 1:1 call signal LAN-first (same-Wi-Fi offline call setup),
+ * falling back to the onion/snode path when the peer isn't reachable on the LAN.
+ * Sync-to-self copies always use the snode path. Returns the same shape as
+ * MessageQueue.sendTo1o1NonDurably (an effective timestamp, or null).
+ */
+async function apocentroSendCallTo1o1(
+  pubkey: PubKey,
+  message: CallMessage
+): Promise<number | null> {
+  // LAN-first (fast / offline), onion fallback. Do NOT send both: a duplicate
+  // offer/answer/ICE breaks WebRTC negotiation on the callee.
+  if (!UserUtils.isUsFromCache(pubkey.key)) {
+    const raw = MessageUtils.toRawMessage(pubkey, message, SnodeNamespaces.Default);
+    if (await trySendCallSignalOverLan(raw)) {
+      return NetworkTime.now();
+    }
+  }
+  return MessageQueue.use().sendTo1o1NonDurably({
+    pubkey,
+    message,
+    namespace: SnodeNamespaces.Default,
+  });
+}
+
 async function sendCallMessageAndSync(callMessage: CallMessage, user: string) {
   await Promise.all([
-    MessageQueue.use().sendTo1o1NonDurably({
-      pubkey: PubKey.cast(user),
-      message: callMessage,
-      namespace: SnodeNamespaces.Default,
-    }),
-    MessageQueue.use().sendTo1o1NonDurably({
-      pubkey: UserUtils.getOurPubKeyFromCache(),
-      message: callMessage,
-      namespace: SnodeNamespaces.Default,
-    }),
+    apocentroSendCallTo1o1(PubKey.cast(user), callMessage),
+    apocentroSendCallTo1o1(UserUtils.getOurPubKeyFromCache(), callMessage),
   ]);
 }
 
@@ -1057,11 +1039,7 @@ export async function USER_hangup(fromSender: string) {
     expireTimer,
     dbMessageIdentifier: uuidV4(),
   });
-  void MessageQueue.use().sendTo1o1NonDurably({
-    pubkey: PubKey.cast(fromSender),
-    message: endCallMessage,
-    namespace: SnodeNamespaces.Default,
-  });
+  void apocentroSendCallTo1o1(PubKey.cast(fromSender), endCallMessage);
 
   window.inboxStore?.dispatch(endCall());
   window.log.info('sending hangup with an END_CALL MESSAGE');
@@ -1566,4 +1544,108 @@ export function getCurrentCallDuration() {
   return currentCallStartTimestamp
     ? Math.floor((Date.now() - currentCallStartTimestamp) / 1000)
     : undefined;
+}
+
+// Apocentro: live call diagnostics for the on-screen call-info overlay (mirrors
+// the Android call debug overlay: connection type, latency, selected local/remote
+// candidate). Read from the WebRTC stats of the active peer connection.
+export type ApocentroCallStats = {
+  connectionState: string;
+  // WebRTC ICE progress, so the UI can show "Handling connection candidates…"
+  // like the Android app while the call is still being set up.
+  iceState: string;
+  remoteCandidateCount: number;
+  candidatePairCount: number;
+  type: 'Direct' | 'Relay' | 'Unknown';
+  isLocalNetwork: boolean;
+  rttMs: number | null;
+  localAddress: string | null;
+  remoteAddress: string | null;
+  localCandidateType: string | null;
+  remoteCandidateType: string | null;
+};
+
+function isPrivateIp(ip: string | null): boolean {
+  if (!ip) {
+    return false;
+  }
+  return (
+    /^10\./.test(ip) ||
+    /^192\.168\./.test(ip) ||
+    /^172\.(1[6-9]|2\d|3[01])\./.test(ip) ||
+    /^169\.254\./.test(ip) ||
+    /^127\./.test(ip) ||
+    /^(fd|fe80)/i.test(ip)
+  );
+}
+
+export async function getApocentroCallStats(): Promise<ApocentroCallStats | null> {
+  if (!peerConnection) {
+    return null;
+  }
+  try {
+    const reports = await peerConnection.getStats();
+    const byId = new Map<string, any>();
+    let selectedPair: any = null;
+    let remoteCandidateCount = 0;
+    let candidatePairCount = 0;
+    reports.forEach((report: any) => {
+      byId.set(report.id, report);
+    });
+    reports.forEach((report: any) => {
+      if (report.type === 'remote-candidate') {
+        remoteCandidateCount += 1;
+      }
+      if (report.type === 'candidate-pair') {
+        candidatePairCount += 1;
+        if (report.nominated || report.state === 'succeeded') {
+          if (!selectedPair || report.selected || report.nominated) {
+            selectedPair = report;
+          }
+        }
+      }
+    });
+
+    const base: ApocentroCallStats = {
+      connectionState: peerConnection.connectionState,
+      iceState: peerConnection.iceConnectionState,
+      remoteCandidateCount,
+      candidatePairCount,
+      type: 'Unknown',
+      isLocalNetwork: false,
+      rttMs: null,
+      localAddress: null,
+      remoteAddress: null,
+      localCandidateType: null,
+      remoteCandidateType: null,
+    };
+    if (!selectedPair) {
+      return base;
+    }
+
+    const local = byId.get(selectedPair.localCandidateId);
+    const remote = byId.get(selectedPair.remoteCandidateId);
+    const localType = local?.candidateType ?? null;
+    const remoteType = remote?.candidateType ?? null;
+    const localAddress = local?.address ?? local?.ip ?? null;
+    const remoteAddress = remote?.address ?? remote?.ip ?? null;
+    const rttMs =
+      typeof selectedPair.currentRoundTripTime === 'number'
+        ? Math.round(selectedPair.currentRoundTripTime * 1000)
+        : null;
+    const isRelay = localType === 'relay' || remoteType === 'relay';
+
+    return {
+      ...base,
+      type: isRelay ? 'Relay' : 'Direct',
+      isLocalNetwork: localType === 'host' && remoteType === 'host' && isPrivateIp(remoteAddress),
+      rttMs,
+      localAddress,
+      remoteAddress,
+      localCandidateType: localType,
+      remoteCandidateType: remoteType,
+    };
+  } catch {
+    return null;
+  }
 }

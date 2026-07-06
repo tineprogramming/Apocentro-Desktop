@@ -41,6 +41,24 @@ window.getVersion = () => configAny.version;
 window.getCommitHash = () => configAny.commitHash;
 window.getGiphyApiKey = () => configAny.giphyApiKey;
 window.getNodeVersion = () => configAny.node_version;
+
+// Apocentro LAN calling: renderer bridge to the main-process net/mDNS transport.
+window.apocentroLan = {
+  start: (ourPubKey, contactPubKeys) =>
+    ipc.invoke('apocentro-lan:start', ourPubKey, contactPubKeys),
+  stop: () => ipc.send('apocentro-lan:stop'),
+  updateContacts: contactPubKeys => ipc.send('apocentro-lan:update-contacts', contactPubKeys),
+  learnPeer: (pubkey, host, port) => ipc.send('apocentro-lan:learn-peer', pubkey, host, port),
+  rediscover: () => ipc.send('apocentro-lan:rediscover'),
+  send: (toPubKey, payloadBase64) => ipc.invoke('apocentro-lan:send', toPubKey, payloadBase64),
+  onPeer: cb => ipc.on('apocentro-lan:peer', (_e, peer) => cb(peer)),
+  onIncoming: cb => ipc.on('apocentro-lan:incoming', (_e, frame) => cb(frame)),
+  onLog: cb => ipc.on('apocentro-lan:log', (_e, msg) => cb(msg)),
+  onStatus: cb => ipc.on('apocentro-lan:status', (_e, status) => cb(status)),
+};
+// Windows-only: add / check a Windows Firewall exception for offline LAN calls.
+window.apocentroAddFirewallRule = () => ipc.invoke('apocentro-firewall:add');
+window.apocentroFirewallStatus = () => ipc.invoke('apocentro-firewall:status');
 window.getOSRelease = () =>
   `${os.type()} ${os.release()}, Node.js ${config.node_version} ${os.platform()} ${os.arch()}`;
 window.saveLog = () => ipc.send('export-logs');

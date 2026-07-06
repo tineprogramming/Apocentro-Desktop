@@ -1,3 +1,4 @@
+import { useCallback, useEffect, useState } from 'react';
 import useUpdate from 'react-use/lib/useUpdate';
 import { getAppDispatch } from '../../../../state/dispatch';
 
@@ -34,6 +35,41 @@ import { UserSettingsModalContainer } from '../components/UserSettingsModalConta
 import { UserConfigWrapperActions } from '../../../../webworker/workers/browser/libsession/libsession_worker_userconfig_interface';
 import { toggleGiphyIntegration } from '../actions/toggleGiphyIntegration';
 import { getFeatureFlag } from '../../../../state/ducks/types/releasedFeaturesReduxTypes';
+import { CallManager } from '../../../../session/utils';
+import { APOCENTRO_CALL_DEBUG_KEY } from '../../../../session/utils/calling/ApocentroCallConfig';
+import { pushToastSuccess, pushToastError } from '../../../../session/utils/Toast';
+
+// Apocentro: gates 1:1 voice/video calling (incl. LAN/offline calls). Enabling it
+// grants the media permission and turns on the call engine.
+const toggleCallMediaPermissions = async (triggerUIUpdate: () => void) => {
+  const currentValue = window.getCallMediaPermissions();
+  const onClose = () => window.inboxStore?.dispatch(updateConfirmModal(null));
+  if (!currentValue) {
+    window.inboxStore?.dispatch(
+      updateConfirmModal({
+        title: { token: 'callsVoiceAndVideoBeta' },
+        i18nMessage: { token: 'callsVoiceAndVideoModalDescription' },
+        okTheme: SessionButtonColor.Danger,
+        okText: { token: 'theContinue' },
+        onClickOk: async () => {
+          await window.toggleCallMediaPermissionsTo(true);
+          triggerUIUpdate();
+          CallManager.onTurnedOnCallMediaPermissions();
+          onClose();
+        },
+        onClickCancel: async () => {
+          await window.toggleCallMediaPermissionsTo(false);
+          triggerUIUpdate();
+          onClose();
+        },
+        onClickClose: onClose ? void onClose() : undefined,
+      })
+    );
+  } else {
+    await window.toggleCallMediaPermissionsTo(false);
+    triggerUIUpdate();
+  }
+};
 
 async function toggleLinkPreviews(isToggleOn: boolean, forceUpdate: () => void) {
   if (!isToggleOn) {
@@ -123,6 +159,18 @@ export function PrivacySettingsPage(modalState: UserSettingsModalState) {
 
   const forceUpdate = useUpdate();
 
+  // Windows firewall exception state, so we can show "Allowed" (disabled) once
+  // the rule exists instead of prompting for elevation again.
+  const [firewall, setFirewall] = useState<{ supported: boolean; exists: boolean } | null>(null);
+  const refreshFirewall = useCallback(async () => {
+    if (window.apocentroFirewallStatus) {
+      setFirewall(await window.apocentroFirewallStatus());
+    }
+  }, []);
+  useEffect(() => {
+    void refreshFirewall();
+  }, [refreshFirewall]);
+
   return (
     <UserSettingsModalContainer
       headerChildren={
@@ -135,6 +183,55 @@ export function PrivacySettingsPage(modalState: UserSettingsModalState) {
       }
       onClose={closeAction || undefined}
     >
+      <PanelLabelWithDescription title={{ token: 'callsSettings' }} />
+      <PanelButtonGroup>
+        <SettingsToggleBasic
+          baseDataTestId="enable-calls"
+          active={Boolean(window.getCallMediaPermissions())}
+          onClick={async () => {
+            await toggleCallMediaPermissions(forceUpdate);
+            forceUpdate();
+          }}
+          text={{ token: 'callsVoiceAndVideoBeta' }}
+          subText={{ token: 'callsVoiceAndVideoToggleDescription' }}
+        />
+        <SettingsToggleBasic
+          baseDataTestId="enable-call-debug-info"
+          active={window.getSettingValue(APOCENTRO_CALL_DEBUG_KEY) !== false}
+          onClick={async () => {
+            const old = window.getSettingValue(APOCENTRO_CALL_DEBUG_KEY) !== false;
+            await window.setSettingValue(APOCENTRO_CALL_DEBUG_KEY, !old);
+            forceUpdate();
+          }}
+          text={{ token: 'callsDebugInfoDev' }}
+          subText={{ token: 'callsDebugInfoDescriptionDev' }}
+        />
+        {window.platform === 'win32' && window.apocentroAddFirewallRule && firewall?.supported ? (
+          <SettingsPanelButtonInlineBasic
+            baseDataTestId="add-firewall-rule"
+            text={{ token: 'callsFirewallDev' }}
+            subText={{
+              token: firewall.exists
+                ? 'callsFirewallEnabledDescriptionDev'
+                : 'callsFirewallDescriptionDev',
+            }}
+            buttonColor={SessionButtonColor.PrimaryDark}
+            buttonText={
+              firewall.exists ? tr('callsFirewallAddedButtonDev') : tr('callsFirewallButtonDev')
+            }
+            disabled={firewall.exists}
+            onClick={async () => {
+              const res = await window.apocentroAddFirewallRule?.();
+              if (res?.ok) {
+                pushToastSuccess('apocentro-firewall', tr('callsFirewallDoneDev'));
+                await refreshFirewall();
+              } else {
+                pushToastError('apocentro-firewall', tr('callsFirewallFailedDev'));
+              }
+            }}
+          />
+        ) : null}
+      </PanelButtonGroup>
       <PanelLabelWithDescription title={{ token: 'permissionsMicrophone' }} />
       <PanelButtonGroup>
         <SettingsToggleBasic

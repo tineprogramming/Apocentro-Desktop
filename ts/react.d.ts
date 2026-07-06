@@ -84,6 +84,7 @@ declare module 'react' {
 
   export type SettingsToggles =
     | 'enable-calls'
+    | 'enable-call-debug-info'
     | 'enable-microphone'
     | 'enable-communities-message-requests'
     | 'enable-read-receipts'
@@ -110,6 +111,7 @@ declare module 'react' {
     | 'change-password'
     | 'remove-password'
     | 'export-logs'
+    | 'add-firewall-rule'
     | 'hide-recovery-password';
   type SettingsExternalLinkButtons =
     | 'faq'

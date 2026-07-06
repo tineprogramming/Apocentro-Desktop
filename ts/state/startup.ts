@@ -1,6 +1,7 @@
 import { fromPairs, map } from 'lodash';
 import { ConvoHub } from '../session/conversations';
 import { UserUtils } from '../session/utils';
+import { initApocentroLanCalling } from '../session/utils/calling/ApocentroLanCalling';
 import { createStore } from './createStore';
 import { initialCallState } from './ducks/call';
 import { getEmptyConversationState, openConversationWithMessages } from './ducks/conversations';
@@ -168,6 +169,8 @@ export const doAppStartUp = async () => {
   // eslint-disable-next-line more/no-then
   void SnodePool.getFreshSwarmFor(UserUtils.getOurPubKeyStrFromCache()).then(async () => {
     window.log.debug('appStartup: got our fresh swarm, starting polling');
+    // Apocentro: start LAN/offline call discovery + listening once we're logged in.
+    void initApocentroLanCalling();
     // trigger any other actions that need to be done after the swarm is ready
     window.inboxStore?.dispatch(networkDataActions.fetchInfoFromSeshServer() as any);
     window.inboxStore?.dispatch(

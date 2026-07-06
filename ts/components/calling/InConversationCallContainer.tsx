@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { useSelector } from 'react-redux';
 
 import useInterval from 'react-use/lib/useInterval';
+import useMount from 'react-use/lib/useMount';
 import styled from 'styled-components';
 import { CallManager, UserUtils } from '../../session/utils';
 import {
@@ -17,8 +18,18 @@ import { StyledVideoElement } from './DraggableCallContainer';
 
 import { useModuloWithTripleDots } from '../../hooks/useModuloWithTripleDots';
 import { useVideoCallEventsListener } from '../../hooks/useVideoEventListener';
-import { DEVICE_DISABLED_DEVICE_ID } from '../../session/utils/calling/CallManager';
+import {
+  DEVICE_DISABLED_DEVICE_ID,
+  type ApocentroCallStats,
+} from '../../session/utils/calling/CallManager';
 import { CallWindowControls } from './CallButtons';
+import { ensureGeoReader, countryForIp } from '../../session/utils/calling/ApocentroGeo';
+import {
+  isPeerReachableOnLan,
+  getLastLanSendStatus,
+  getLanServicesSeen,
+} from '../../session/utils/calling/ApocentroLanCalling';
+import { APOCENTRO_CALL_DEBUG_KEY } from '../../session/utils/calling/ApocentroCallConfig';
 
 import { useFormattedDuration } from '../../hooks/useFormattedDuration';
 import { SessionSpinner } from '../loading';
@@ -41,6 +52,17 @@ const InConvoCallWindow = styled.div`
   min-height: 80px;
   align-items: center;
   flex-grow: 1;
+`;
+
+// Flex column: the Apocentro info bar is a REAL sibling above the call window
+// (not an absolute overlay), so the call controls live in the window *below* it
+// and can never be covered, whatever the pane height.
+const StyledCallColumn = styled.div`
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
+  flex-shrink: 1;
+  min-height: 80px;
 `;
 
 const RelativeCallWindow = styled.div`
@@ -114,6 +136,240 @@ const DurationLabel = () => {
   return <StyledCenteredLabel>{dateString}</StyledCenteredLabel>;
 };
 
+// Apocentro: on-screen call diagnostics (connection type, latency, selected
+// local/remote candidate + state), like the Android call debug overlay.
+//
+// This is a REAL bar that sits above the call window as a flex sibling (see
+// StyledCallColumn) — NOT an absolute overlay. It therefore takes its own
+// vertical space and pushes the video + call controls down below it, so it can
+// never cover the buttons. It is kept compact (a single wrapping row) so it
+// doesn't eat the call window.
+const StyledCallInfoOverlay = styled.div`
+  width: 100%;
+  box-sizing: border-box;
+  flex-shrink: 0;
+  padding: 5px 10px;
+  background: var(--background-secondary-color);
+  color: var(--text-primary-color);
+  border-bottom: 1px solid var(--border-color);
+  font-size: 11px;
+  line-height: 1.4;
+  font-family: var(--font-mono, monospace);
+  display: flex;
+  flex-flow: row wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 3px 10px;
+`;
+
+const StyledInfoItem = styled.span`
+  white-space: nowrap;
+`;
+
+// The overlay text uses a monospace stack, which on Windows has no country-flag
+// glyphs (the flag emoji renders as its 2-letter code). Force the bundled
+// NotoColorEmoji font — which does include flags — for the flag glyph only.
+const StyledFlag = styled.span`
+  font-family: 'NotoColorEmoji', var(--font-mono, monospace);
+`;
+
+// Badge colour reflects CALL QUALITY (round-trip latency), which is what the
+// user actually cares about — "is this call going to be smooth?". The connection
+// TYPE (direct / relay) is shown as the badge *text*, not the colour, so a relay
+// call with fine latency is still green and only turns amber/red when latency is
+// genuinely poor. Thresholds match the signal bars (see barsForConnection).
+//  - good  (<150ms)   → green
+//  - ok    (150–300ms)→ amber
+//  - poor  (>300ms)   → red
+//  - idle  (connecting)→ neutral grey
+type BadgeVariant = 'good' | 'ok' | 'poor' | 'idle';
+
+function variantForStats(stats: ApocentroCallStats | null): BadgeVariant {
+  if (!stats || stats.connectionState !== 'connected') {
+    return 'idle';
+  }
+  const rtt = stats.rttMs;
+  if (rtt == null || rtt < 150) {
+    return 'good';
+  }
+  if (rtt < 300) {
+    return 'ok';
+  }
+  return 'poor';
+}
+
+const badgeBg = (v: BadgeVariant) =>
+  v === 'good'
+    ? 'rgba(0, 190, 100, 0.92)'
+    : v === 'ok'
+      ? 'rgba(240, 150, 20, 0.95)'
+      : v === 'poor'
+        ? 'rgba(230, 60, 50, 0.95)'
+        : 'var(--background-primary-color)';
+
+const badgeFg = (v: BadgeVariant) =>
+  v === 'idle' ? 'var(--text-primary-color)' : v === 'poor' ? '#ffffff' : '#0a0a0a';
+
+const StyledConnBadge = styled.div<{ $variant: BadgeVariant }>`
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 9px;
+  border-radius: 11px;
+  font-weight: 600;
+  background: ${props => badgeBg(props.$variant)};
+  color: ${props => badgeFg(props.$variant)};
+`;
+
+const StyledBars = styled.div`
+  display: inline-flex;
+  align-items: flex-end;
+  gap: 2px;
+  height: 13px;
+`;
+
+const StyledBar = styled.div<{ $on: boolean; $h: number; $variant: BadgeVariant }>`
+  width: 3px;
+  height: ${props => props.$h}px;
+  border-radius: 1px;
+  background: ${props => {
+    const onColor = props.$variant === 'idle' ? 'var(--text-primary-color)' : badgeFg(props.$variant);
+    const offColor =
+      props.$variant === 'idle'
+        ? 'var(--text-secondary-color)'
+        : props.$variant === 'poor'
+          ? 'rgba(255, 255, 255, 0.35)'
+          : 'rgba(10, 10, 10, 0.3)';
+    return props.$on ? onColor : offColor;
+  }};
+`;
+
+const SignalBars = ({ filled, variant }: { filled: number; variant: BadgeVariant }) => {
+  const heights = [5, 8, 11, 14];
+  return (
+    <StyledBars>
+      {heights.map((h, i) => (
+        <StyledBar key={h} $h={h} $on={i < filled} $variant={variant} />
+      ))}
+    </StyledBars>
+  );
+};
+
+// Signal-strength bars (0–4) from round-trip latency, like the Android overlay.
+function barsForConnection(stats: ApocentroCallStats | null): number {
+  if (!stats || stats.connectionState !== 'connected') {
+    return 0;
+  }
+  const rtt = stats.rttMs;
+  if (rtt == null) {
+    return 2;
+  }
+  if (rtt < 60) {
+    return 4;
+  }
+  if (rtt < 150) {
+    return 3;
+  }
+  if (rtt < 300) {
+    return 2;
+  }
+  return 1;
+}
+
+const ApocentroCallInfoOverlay = () => {
+  // Show for the whole ongoing call (ringing / connecting / connected) so it's
+  // useful precisely while a call is still trying to connect.
+  const hasOngoingCall = useSelector(getHasOngoingCallWithFocusedConvo);
+  const ongoingCallPubkey = useSelector(getHasOngoingCallWithPubkey);
+  const [stats, setStats] = useState<ApocentroCallStats | null>(null);
+
+  useMount(() => {
+    ensureGeoReader();
+  });
+
+  useInterval(() => {
+    if (!hasOngoingCall) {
+      return;
+    }
+    void CallManager.getApocentroCallStats().then(setStats);
+  }, 1000);
+
+  if (!hasOngoingCall) {
+    return null;
+  }
+
+  const lanReachable = ongoingCallPubkey ? isPeerReachableOnLan(ongoingCallPubkey) : false;
+  const lanSend = getLastLanSendStatus();
+  const isConnected = stats?.connectionState === 'connected';
+  const isRelay = stats?.type === 'Relay';
+  const badge = stats?.isLocalNetwork ? 'Local network' : (stats?.type ?? '…');
+  // Colour by latency (quality); the text above already says the type.
+  const badgeVariant = variantForStats(stats);
+  const remoteCountry = countryForIp(stats?.remoteAddress ?? null);
+
+  // The address that best represents where we're connected: for a TURN call the
+  // relay's public IP (our local 'relay' candidate), otherwise the remote peer.
+  // Shown always, like the Android "Cloudflare relay · 🇺🇸 <ip>" / "<flag> <ip>"
+  // line, with an offline country flag from the local GeoLite2 db.
+  const whereIp = isRelay ? (stats?.localAddress ?? stats?.remoteAddress) : stats?.remoteAddress;
+  const whereCountry = countryForIp(whereIp ?? null);
+
+  // Verbose LAN/ICE diagnostics are gated behind the "Show call connection
+  // details" setting (default on). When off, only the connection-type badge +
+  // signal bars + latency + the peer IP/country show — like the Android/phone view.
+  const showDebug = window.getSettingValue?.(APOCENTRO_CALL_DEBUG_KEY) !== false;
+
+  // While the call is still being set up, surface ICE progress the way the
+  // Android app does ("Handling Connection Candidates …") instead of nothing.
+  const settingUp = !isConnected && stats?.iceState !== 'completed';
+  const progress =
+    settingUp && stats
+      ? `Handling connection candidates ${stats.remoteCandidateCount}`
+      : null;
+
+  return (
+    <StyledCallInfoOverlay>
+      <StyledConnBadge $variant={badgeVariant}>
+        {badge}
+        <SignalBars filled={barsForConnection(stats)} variant={badgeVariant} />
+        {stats?.rttMs != null ? `${stats.rttMs} ms` : ''}
+      </StyledConnBadge>
+      {whereIp && (
+        <StyledInfoItem>
+          {isRelay ? 'Relay · ' : ''}
+          {whereCountry ? <StyledFlag>{whereCountry.flag} </StyledFlag> : ''}
+          {whereIp}
+        </StyledInfoItem>
+      )}
+      {progress && <StyledInfoItem>{progress}</StyledInfoItem>}
+      {showDebug && (
+        <>
+          <StyledInfoItem>
+            LAN {lanReachable ? '✓' : '✗'} · mDNS {getLanServicesSeen()}
+          </StyledInfoItem>
+          <StyledInfoItem>
+            send {lanSend ? `${lanSend.ok ? '✓' : '✗'} ${lanSend.detail}` : '—'}
+          </StyledInfoItem>
+          <StyledInfoItem>
+            state {stats?.connectionState ?? '…'} · ice {stats?.iceState ?? '…'}
+          </StyledInfoItem>
+          {stats?.remoteAddress && (
+            <StyledInfoItem>
+              peer {remoteCountry ? <StyledFlag>{remoteCountry.flag} </StyledFlag> : ''}
+              {stats.remoteAddress} ({stats.remoteCandidateType})
+            </StyledInfoItem>
+          )}
+          {stats?.localAddress && (
+            <StyledInfoItem>
+              you {stats.localAddress} ({stats.localCandidateType})
+            </StyledInfoItem>
+          )}
+        </>
+      )}
+    </StyledCallInfoOverlay>
+  );
+};
+
 const StyledSpinner = styled.div<{ $fullWidth: boolean }>`
   height: 100%;
   width: ${props => (props.$fullWidth ? '100%' : '50%')};
@@ -184,12 +440,14 @@ export const InConversationCallContainer = () => {
   }
 
   return (
-    <InConvoCallWindow>
-      <RelativeCallWindow>
-        <RingingLabel />
-        <ConnectingLabel />
-        <DurationLabel />
-        <VideoContainer>
+    <StyledCallColumn>
+      <ApocentroCallInfoOverlay />
+      <InConvoCallWindow>
+        <RelativeCallWindow>
+          <RingingLabel />
+          <ConnectingLabel />
+          <DurationLabel />
+          <VideoContainer>
           <VideoLoadingSpinner fullWidth={false} />
           <StyledVideoElement
             ref={videoRefRemote}
@@ -226,7 +484,8 @@ export const InConversationCallContainer = () => {
           remoteStreamVideoIsMuted={remoteStreamVideoIsMuted}
           isFullScreen={false}
         />
-      </RelativeCallWindow>
-    </InConvoCallWindow>
+        </RelativeCallWindow>
+      </InConvoCallWindow>
+    </StyledCallColumn>
   );
 };

@@ -45,6 +45,20 @@ export const devSimpleNoArgs = {
   // gifs
   searchForGifs: 'Search for gifs',
   giphyIntegrationDescription: 'Enable giphy integration in Session',
+
+  // Apocentro calling
+  callsDebugInfoDev: 'Show call connection details',
+  callsDebugInfoDescriptionDev:
+    'Show LAN discovery, connection state and candidate details during a call. Turn off to show only the connection type, signal strength and latency.',
+  callsFirewallDev: 'Offline calls firewall access',
+  callsFirewallDescriptionDev:
+    'Allow Apocentro through Windows Firewall so offline LAN calls can connect without turning the firewall off. Requires administrator approval once.',
+  callsFirewallButtonDev: 'Allow',
+  callsFirewallAddedButtonDev: 'Allowed',
+  callsFirewallDoneDev: 'Firewall exception added. Offline calls should now connect.',
+  callsFirewallFailedDev: 'Could not add the firewall exception.',
+  callsFirewallEnabledDescriptionDev:
+    'Apocentro is already allowed through Windows Firewall, so offline LAN calls can connect.',
 } as const;
 
 export type TokenDevNoArgs = keyof typeof devSimpleNoArgs;
