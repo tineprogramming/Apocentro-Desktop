@@ -28,6 +28,15 @@ const SETTING_KEY = 'apocentro-lan-calling';
 let started = false;
 const reachablePeers = new Set<string>();
 
+// Total _apocentro._tcp mDNS services seen (contact or not) — surfaced in the
+// overlay to distinguish "no mDNS at all" (0 = network blocks multicast) from
+// "we see services but the peer isn't matched".
+let lanServicesSeen = 0;
+
+export function getLanServicesSeen(): number {
+  return lanServicesSeen;
+}
+
 // Last LAN call-signal send outcome, surfaced in the call overlay for debugging.
 let lastLanSend: { ok: boolean; detail: string } | null = null;
 
@@ -62,6 +71,12 @@ export async function initApocentroLanCalling(): Promise<void> {
 
   window.apocentroLan.onLog(msg => {
     window?.log?.info(`[ApocentroLan/main] ${msg}`);
+  });
+
+  window.apocentroLan.onStatus(status => {
+    if (typeof status?.servicesSeen === 'number') {
+      lanServicesSeen = status.servicesSeen;
+    }
   });
 
   window.apocentroLan.onPeer(peer => {

@@ -106,6 +106,7 @@ declare global {
         cb: (frame: { payloadBase64: string; host: string; senderPort: number }) => void
       ) => void;
       onLog: (cb: (msg: string) => void) => void;
+      onStatus: (cb: (status: { servicesSeen: number }) => void) => void;
     };
   }
 }

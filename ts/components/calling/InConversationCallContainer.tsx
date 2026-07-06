@@ -27,6 +27,7 @@ import { ensureGeoReader, countryForIp } from '../../session/utils/calling/Apoce
 import {
   isPeerReachableOnLan,
   getLastLanSendStatus,
+  getLanServicesSeen,
 } from '../../session/utils/calling/ApocentroLanCalling';
 
 import { useFormattedDuration } from '../../hooks/useFormattedDuration';
@@ -257,7 +258,10 @@ const ApocentroCallInfoOverlay = () => {
         <SignalBars filled={barsForConnection(stats)} connected={isConnected} />
         {stats?.rttMs != null ? `${stats.rttMs} ms` : ''}
       </StyledConnBadge>
-      <div>LAN peer: {lanReachable ? 'discovered ✓' : 'not discovered ✗'}</div>
+      <div>
+        LAN peer: {lanReachable ? 'discovered ✓' : 'not discovered ✗'} · mDNS seen:{' '}
+        {getLanServicesSeen()}
+      </div>
       <div>
         LAN send:{' '}
         {lanSend ? `${lanSend.ok ? 'OK ✓' : 'failed ✗'} ${lanSend.detail}` : '—'}

@@ -67,10 +67,15 @@ function ourIpv4s(): Array<string> {
 }
 
 class ApocentroLan extends EventEmitter {
-  private bonjour: Bonjour | null = null;
-  private published: Service | null = null;
-  private browser: Browser | null = null;
+  // One (Bonjour, publish, browse) per local IPv4 interface: on multi-homed
+  // Windows the default mDNS socket often binds to the wrong adapter (VPN /
+  // Hyper-V / virtual), so nothing on the real Wi-Fi is ever seen. Binding one
+  // instance per interface covers them all.
+  private bonjours: Array<Bonjour> = [];
+  private publisheds: Array<Service> = [];
+  private browsers: Array<Browser> = [];
   private server: Server | null = null;
+  private servicesSeen = 0;
 
   private ourPubKey: string | null = null;
   private tcpPort = 0;
@@ -110,7 +115,14 @@ class ApocentroLan extends EventEmitter {
       `start: me=${ourPubKey.slice(0, 8)}… token=${ownToken} tcpPort=${this.tcpPort} contacts=${contactPubKeys.length} ips=${ourIpv4s().join(',')}`
     );
 
-    this.bonjour = new Bonjour();
+    const ips = ourIpv4s();
+    // Create one instance bound to each interface; fall back to a default
+    // instance if we can't enumerate any IPv4.
+    const optsList: Array<Record<string, unknown>> = ips.length
+      ? ips.map(ip => ({ interface: ip }))
+      : [{}];
+    this.bonjours = optsList.map(opts => new Bonjour(opts));
+    this.log(`created ${this.bonjours.length} mDNS instance(s) on: ${ips.join(', ') || 'default'}`);
     this.advertise();
     this.startBrowsing();
 
@@ -133,19 +145,24 @@ class ApocentroLan extends EventEmitter {
       clearInterval(this.rebrowseTimer);
       this.rebrowseTimer = null;
     }
-    try {
-      this.browser?.stop();
-    } catch {
-      /* ignore */
-    }
-    this.browser = null;
-    try {
-      this.bonjour?.unpublishAll(() => this.bonjour?.destroy());
-    } catch {
-      /* ignore */
-    }
-    this.bonjour = null;
-    this.published = null;
+    this.browsers.forEach(b => {
+      try {
+        b.stop();
+      } catch {
+        /* ignore */
+      }
+    });
+    this.browsers = [];
+    this.bonjours.forEach(bonjour => {
+      try {
+        bonjour.unpublishAll(() => bonjour.destroy());
+      } catch {
+        /* ignore */
+      }
+    });
+    this.bonjours = [];
+    this.publisheds = [];
+    this.servicesSeen = 0;
     try {
       this.server?.close();
     } catch {
@@ -212,47 +229,56 @@ class ApocentroLan extends EventEmitter {
   }
 
   private advertise(): void {
-    if (!this.bonjour || !this.ourPubKey) {
+    if (!this.bonjours.length || !this.ourPubKey) {
       return;
     }
     const token = tokenFor(this.ourPubKey, currentEpoch());
-    try {
-      this.published?.stop?.(() => {});
-    } catch {
-      /* ignore */
-    }
-    this.published = this.bonjour.publish({
-      name: `apocentro-${token}`,
-      type: SERVICE_TYPE,
-      port: this.tcpPort,
-      txt: { [ATTR_TOKEN]: token },
+    this.publisheds.forEach(p => {
+      try {
+        p.stop?.(() => {});
+      } catch {
+        /* ignore */
+      }
     });
+    this.publisheds = this.bonjours.map(bonjour =>
+      bonjour.publish({
+        name: `apocentro-${token}`,
+        type: SERVICE_TYPE,
+        port: this.tcpPort,
+        txt: { [ATTR_TOKEN]: token },
+      })
+    );
     this.log(`advertising _${SERVICE_TYPE}._tcp name=apocentro-${token} port=${this.tcpPort}`);
   }
 
   private startBrowsing(): void {
-    if (!this.bonjour) {
+    if (!this.bonjours.length) {
       return;
     }
-    this.browser = this.bonjour.find({ type: SERVICE_TYPE });
-    this.browser.on('up', (service: Service) => this.onServiceUp(service));
-    // Intentionally do NOT drop the peer on 'down': mDNS services flap (missed
-    // announcements, brief sleeps) and dropping them makes discovery unreliable
-    // right when a call starts. We keep the last known address; the 30s negative
-    // cache handles an address that has genuinely gone away.
-    this.browser.on('down', (service: Service) => {
-      this.log(`mDNS service down: ${service.name} (keeping last known address)`);
+    this.browsers = this.bonjours.map(bonjour => {
+      const browser = bonjour.find({ type: SERVICE_TYPE });
+      browser.on('up', (service: Service) => this.onServiceUp(service));
+      // Intentionally do NOT drop the peer on 'down': mDNS services flap (missed
+      // announcements, brief sleeps) and dropping them makes discovery unreliable
+      // right when a call starts. We keep the last known address; the 30s negative
+      // cache handles an address that has genuinely gone away.
+      browser.on('down', (service: Service) => {
+        this.log(`mDNS service down: ${service.name} (keeping last known address)`);
+      });
+      return browser;
     });
 
     // Re-issue the browse query so we recover quickly from missed announcements
     // (common right after startup) instead of waiting for the peer's next
     // unsolicited announcement. Fire a few early one-shots, then keep a steady 8s.
     const reQuery = () => {
-      try {
-        (this.browser as unknown as { update?: () => void } | null)?.update?.();
-      } catch {
-        /* ignore */
-      }
+      this.browsers.forEach(b => {
+        try {
+          (b as unknown as { update?: () => void }).update?.();
+        } catch {
+          /* ignore */
+        }
+      });
     };
     [1500, 3500, 6000, 10000].forEach(ms => setTimeout(reQuery, ms));
     this.rebrowseTimer = setInterval(reQuery, 8_000);
@@ -274,6 +300,11 @@ class ApocentroLan extends EventEmitter {
     const token = this.tokenOf(service);
     const host = this.pickIpv4(service);
     const pubkey = token ? this.contactTokenIndex.get(token) : undefined;
+    // Count every _apocentro._tcp service we see (contact or not) so the overlay
+    // can tell "we receive mDNS but the peer isn't a contact" from "we receive no
+    // mDNS at all" (network blocking multicast).
+    this.servicesSeen += 1;
+    this.emit('status', { servicesSeen: this.servicesSeen });
     this.log(
       `discovered mDNS service name=${service.name} token=${token ?? '(none)'} host=${host ?? '?'}:${service.port ?? '?'} → ${
         !token

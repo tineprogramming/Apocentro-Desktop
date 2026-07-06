@@ -53,6 +53,7 @@ window.apocentroLan = {
   onPeer: cb => ipc.on('apocentro-lan:peer', (_e, peer) => cb(peer)),
   onIncoming: cb => ipc.on('apocentro-lan:incoming', (_e, frame) => cb(frame)),
   onLog: cb => ipc.on('apocentro-lan:log', (_e, msg) => cb(msg)),
+  onStatus: cb => ipc.on('apocentro-lan:status', (_e, status) => cb(status)),
 };
 window.getOSRelease = () =>
   `${os.type()} ${os.release()}, Node.js ${config.node_version} ${os.platform()} ${os.arch()}`;
