@@ -33,6 +33,7 @@ import { getIsRinging } from '../RingingManager';
 import { getBlackSilenceMediaStream } from './Silence';
 import { getApocentroIceServers } from './ApocentroCallConfig';
 import { trySendCallSignalOverLan, ensurePeerDiscoveredOnLan } from './ApocentroLanCalling';
+import { apocentroPushWake } from './ApocentroPushRelay';
 import { ed25519Str } from '../String';
 import { WithMessageHash } from '../../types/with';
 import { NetworkTime } from '../../../util/NetworkTime';
@@ -54,6 +55,33 @@ let currentCallUUID: string | undefined;
 let currentCallStartTimestamp: number | undefined;
 
 let weAreCallerOnCurrentCall: boolean | undefined;
+
+// Apocentro: VoIP-push fallback timer. A closed/suspended iOS callee only rings if the caller
+// triggers an APNs VoIP push (via the push relay). After the pre-offer we arm this; if the callee
+// hasn't answered/connected within the delay we ask the relay to wake them. Mirrors iOS (~2.5s).
+const APOCENTRO_PUSH_FALLBACK_DELAY_MS = 2500;
+let apocentroPushFallbackTimer: ReturnType<typeof setTimeout> | null = null;
+
+function armApocentroPushFallback(recipient: string, uuid: string) {
+  const caller = UserUtils.getOurPubKeyStrFromCache();
+  cancelApocentroPushFallback();
+  apocentroPushFallbackTimer = setTimeout(() => {
+    apocentroPushFallbackTimer = null;
+    // Still the same call, and not yet connected? Then the callee may be asleep — wake them.
+    if (currentCallUUID === uuid && peerConnection?.connectionState !== 'connected') {
+      // contactName left empty on purpose: avoids leaking a display name to the relay; the callee
+      // resolves who is calling from `caller` once it wakes.
+      void apocentroPushWake(recipient, uuid, caller, '');
+    }
+  }, APOCENTRO_PUSH_FALLBACK_DELAY_MS);
+}
+
+function cancelApocentroPushFallback() {
+  if (apocentroPushFallbackTimer) {
+    clearTimeout(apocentroPushFallbackTimer);
+    apocentroPushFallbackTimer = null;
+  }
+}
 
 const rejectedCallUUIDS: Set<string> = new Set();
 
@@ -529,6 +557,10 @@ export async function USER_callRecipient(recipient: string) {
     });
   }
 
+  // Apocentro: arm the VoIP-push fallback so a closed-but-online iOS callee still rings if they
+  // don't answer over the normal channels within a couple of seconds.
+  armApocentroPushFallback(recipient, justCreatedCallUUID);
+
   await openMediaDevicesAndAddTracks();
   // Note CallMessages are very custom, as we mostly don't sync them to ourselves.
   // So here, we are creating a DaS/off message saved locally which will expire locally only,
@@ -637,6 +669,8 @@ function handleConnectionStateChanged(pubkey: string) {
   if (peerConnection?.signalingState === 'closed' || peerConnection?.connectionState === 'failed') {
     window.inboxStore?.dispatch(callReconnecting({ pubkey }));
   } else if (peerConnection?.connectionState === 'connected') {
+    // Apocentro: connected — the callee is clearly awake, so cancel the push fallback.
+    cancelApocentroPushFallback();
     const firstAudioInput = audioInputsList?.[0].deviceId || undefined;
     if (firstAudioInput) {
       void selectAudioInputByDeviceId(firstAudioInput);
@@ -655,6 +689,8 @@ function handleConnectionStateChanged(pubkey: string) {
 
 function closeVideoCall() {
   window.log.info('closingVideoCall ');
+  // Apocentro: call is ending — make sure no stray push fires afterwards.
+  cancelApocentroPushFallback();
   currentCallStartTimestamp = undefined;
   weAreCallerOnCurrentCall = undefined;
   if (peerConnection) {
@@ -1364,6 +1400,11 @@ export async function handleCallTypeAnswer(
   if (!callMessageUUID || callMessageUUID.length === 0) {
     window.log.warn('handleCallTypeAnswer has no valid uuid');
     return;
+  }
+
+  // Apocentro: an answer for our current outgoing call means the callee responded — no push needed.
+  if (callMessageUUID === currentCallUUID) {
+    cancelApocentroPushFallback();
   }
 
   // this is an answer we sent to ourself, this must be about another of our device accepting an incoming call.
