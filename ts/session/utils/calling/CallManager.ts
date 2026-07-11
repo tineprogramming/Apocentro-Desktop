@@ -68,10 +68,19 @@ function armApocentroPushFallback(recipient: string, uuid: string) {
   apocentroPushFallbackTimer = setTimeout(() => {
     apocentroPushFallbackTimer = null;
     // Still the same call, and not yet connected? Then the callee may be asleep — wake them.
-    if (currentCallUUID === uuid && peerConnection?.connectionState !== 'connected') {
+    const stillCurrent = currentCallUUID === uuid;
+    const state = peerConnection?.connectionState;
+    if (stillCurrent && state !== 'connected') {
+      window.log.info(
+        `[ApocentroPushRelay] fallback firing for uuid=…${uuid.slice(-6)} (pc state=${state ?? 'none'})`
+      );
       // contactName left empty on purpose: avoids leaking a display name to the relay; the callee
       // resolves who is calling from `caller` once it wakes.
       void apocentroPushWake(recipient, uuid, caller, '');
+    } else {
+      window.log.info(
+        `[ApocentroPushRelay] fallback skipped (stillCurrent=${stillCurrent} pc state=${state ?? 'none'})`
+      );
     }
   }, APOCENTRO_PUSH_FALLBACK_DELAY_MS);
 }

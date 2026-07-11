@@ -26,27 +26,42 @@ export async function apocentroPushWake(
   contactName: string
 ): Promise<void> {
   if (!to) {
+    window?.log?.warn('[ApocentroPushRelay] skipped: empty recipient');
     return;
   }
+  const to6 = to.slice(-6);
+  const uuid6 = uuid.slice(-6);
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10_000);
     // The worker requires the timestamp to be within 60s of now, so stamp it at send time.
+    const timestamp = Date.now();
+    window?.log?.info(
+      `[ApocentroPushRelay] POST ${PUSH_RELAY_URL}/push to=…${to6} uuid=…${uuid6} caller=…${caller.slice(
+        -6
+      )} ts=${timestamp}`
+    );
     const res = await fetch(`${PUSH_RELAY_URL}/push`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ to, uuid, caller, timestamp: Date.now(), contactName }),
+      body: JSON.stringify({ to, uuid, caller, timestamp, contactName }),
       signal: controller.signal,
     });
     clearTimeout(timeout);
     if (res.ok) {
-      window?.log?.info('[ApocentroPushRelay] push succeeded');
+      window?.log?.info(`[ApocentroPushRelay] push OK (${res.status}) to=…${to6} uuid=…${uuid6}`);
     } else {
-      window?.log?.warn(`[ApocentroPushRelay] push returned ${res.status}`);
+      // Read the worker's error body so a rejection (bad timestamp, rate limit, etc.) is visible.
+      const body = await res.text().catch(() => '<no body>');
+      window?.log?.warn(
+        `[ApocentroPushRelay] push FAILED status=${res.status} to=…${to6} body=${body.slice(0, 300)}`
+      );
     }
   } catch (e) {
     window?.log?.warn(
-      `[ApocentroPushRelay] push failed: ${e instanceof Error ? e.message : String(e)}`
+      `[ApocentroPushRelay] push threw for to=…${to6} uuid=…${uuid6}: ${
+        e instanceof Error ? `${e.name}: ${e.message}` : String(e)
+      }`
     );
   }
 }
