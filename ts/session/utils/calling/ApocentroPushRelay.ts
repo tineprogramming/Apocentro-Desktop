@@ -67,13 +67,25 @@ export async function apocentroPushWake(
 }
 
 /**
- * Nudge a (possibly closed) recipient that they have a new message. Wake-only: sends only `to` +
- * a timestamp — no sender, no content. The recipient's iOS Notification Service Extension wakes,
- * polls the swarm and decrypts on-device (the relay never sees content). Fire-and-forget after the
- * message is sent; a no-op at the worker for recipients (e.g. Android/Desktop) without a registered
- * APNs token.
+ * Nudge a (possibly closed) recipient that they have a new message (Option B — envelope-in-push).
+ * Carries the **already-E2E-encrypted** swarm envelope (`enc`, the exact base64 `data` blob we
+ * stored, magic bytes included) plus its swarm metadata. The recipient's iOS Notification Service
+ * Extension decrypts `enc` on-device with its identity key (no swarm poll); the relay only ever
+ * sees an encrypted blob, never content. Fire-and-forget after the message reaches the swarm; a
+ * no-op at the worker for recipients (e.g. Android/Desktop) without a registered APNs token.
+ *
+ * @param to        recipient session id (hex "05…")
+ * @param enc       base64 of the swarm `data` blob AS STORED (magic bytes included). The worker
+ *                  drops it from the push if the payload would exceed the APNs alert budget.
+ * @param namespace the swarm namespace the message was stored in (0 for a 1:1 DM)
+ * @param timestamp the message's swarm/sent timestamp (ms); must be within 60s of now
  */
-export async function apocentroNotify(to: string): Promise<void> {
+export async function apocentroNotify(
+  to: string,
+  enc: string,
+  namespace: number,
+  timestamp: number
+): Promise<void> {
   if (!to) {
     return;
   }
@@ -83,7 +95,7 @@ export async function apocentroNotify(to: string): Promise<void> {
     const res = await fetch(`${PUSH_RELAY_URL}/notify`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ to, timestamp: Date.now() }),
+      body: JSON.stringify({ to, enc, namespace, timestamp }),
       signal: controller.signal,
     });
     clearTimeout(timeout);

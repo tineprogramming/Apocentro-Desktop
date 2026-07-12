@@ -7,8 +7,6 @@ import { PendingMessageCache } from './PendingMessageCache';
 
 import { type ContentMessageNoProfile } from '../messages/outgoing';
 import { ClosedGroupV2VisibleMessage } from '../messages/outgoing/visibleMessage/ClosedGroupVisibleMessage';
-import { VisibleMessage } from '../messages/outgoing/visibleMessage/VisibleMessage';
-import { apocentroNotify } from '../utils/calling/ApocentroPushRelay';
 import { SyncMessageType } from '../utils/sync/syncUtils';
 import { MessageSentHandler } from './MessageSentHandler';
 
@@ -47,17 +45,9 @@ export class MessageQueueCl {
     if ((message as any).syncTarget) {
       throw new Error('SyncMessage needs to be sent with sendSyncMessage');
     }
-    // Apocentro: nudge a closed/screen-off recipient so their iOS NSE wakes, polls the swarm and
-    // decrypts on-device. Wake-only (no sender/content); only real 1:1 chat messages to a private
-    // contact (05…), not groups (03…) or note-to-self. No-op at the worker for callees (e.g.
-    // Android/Desktop) without a registered APNs token.
-    if (
-      message instanceof VisibleMessage &&
-      destinationPubKey.key.startsWith('05') &&
-      destinationPubKey.key !== UserUtils.getOurPubKeyStrFromCache()
-    ) {
-      void apocentroNotify(destinationPubKey.key);
-    }
+    // Apocentro: the closed-iOS message-wake push (Option B) is fired from MessageSender AFTER the
+    // message is actually encrypted + stored (it needs the encrypted envelope), gated by the
+    // `isApocentroVisibleDm` flag set on the raw message. See MessageSender.sendSingleMessage.
     await this.process(destinationPubKey, message, namespace, sentCb);
   }
 
