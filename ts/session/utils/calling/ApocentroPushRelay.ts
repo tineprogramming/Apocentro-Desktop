@@ -65,3 +65,34 @@ export async function apocentroPushWake(
     );
   }
 }
+
+/**
+ * Nudge a (possibly closed) recipient that they have a new message. Wake-only: sends only `to` +
+ * a timestamp — no sender, no content. The recipient's iOS Notification Service Extension wakes,
+ * polls the swarm and decrypts on-device (the relay never sees content). Fire-and-forget after the
+ * message is sent; a no-op at the worker for recipients (e.g. Android/Desktop) without a registered
+ * APNs token.
+ */
+export async function apocentroNotify(to: string): Promise<void> {
+  if (!to) {
+    return;
+  }
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10_000);
+    const res = await fetch(`${PUSH_RELAY_URL}/notify`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ to, timestamp: Date.now() }),
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    if (!res.ok) {
+      window?.log?.warn(`[ApocentroPushRelay] notify returned ${res.status} to=…${to.slice(-6)}`);
+    }
+  } catch (e) {
+    window?.log?.warn(
+      `[ApocentroPushRelay] notify failed: ${e instanceof Error ? e.message : String(e)}`
+    );
+  }
+}
