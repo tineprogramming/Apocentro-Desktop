@@ -76,7 +76,11 @@ function armApocentroPushFallback(recipient: string, uuid: string) {
       );
       // contactName left empty on purpose: avoids leaking a display name to the relay; the callee
       // resolves who is calling from `caller` once it wakes.
-      void apocentroPushWake(recipient, uuid, caller, '');
+      // Carry our offer SDP in the push (candidate-stripped inside apocentroPushWake) so a cold-woken
+      // iOS callee can set its remote description straight from the push instead of polling the swarm
+      // for the offer over onion — the step that made desktop→closed-iOS calls ring but not connect.
+      const offerSdp = peerConnection?.localDescription?.sdp ?? '';
+      void apocentroPushWake(recipient, uuid, caller, '', offerSdp);
     } else {
       window.log.info(
         `[ApocentroPushRelay] fallback skipped (stillCurrent=${stillCurrent} pc state=${state ?? 'none'})`

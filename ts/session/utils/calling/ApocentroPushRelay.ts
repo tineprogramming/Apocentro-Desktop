@@ -15,15 +15,37 @@
 const PUSH_RELAY_URL = 'https://apocentro-push.none-reply.workers.dev';
 
 /**
+ * Strip the private (host/srflx/prflx) ICE candidate lines from an offer SDP, keeping relay
+ * candidates, so the offer fits inside the APNs VoIP push. Mirrors the Android caller. The real
+ * candidates still trickle over the swarm; the callee only needs the media/codec sections to set
+ * its remote description straight from the push (skipping the flaky cold-wake swarm offer poll).
+ */
+function pushSafeOfferSdp(sdp: string | undefined | null): string {
+  if (!sdp) {
+    return '';
+  }
+  const stripped = sdp.replace(/^a=candidate:.*\btyp (?:host|srflx|prflx)\b.*\r?\n?/gm, '');
+  // Leave headroom under the worker's ~4.8KB VoIP budget; if it still won't fit, omit it and the
+  // callee falls back to fetching the offer from its swarm.
+  return stripped.length <= 3500 ? stripped : '';
+}
+
+/**
  * Ask the relay to ring a (possibly closed) callee. Fallback only — send after the pre-offer when
  * the callee hasn't answered. Harmless if they're already open (the receiver dedupes by `uuid`),
  * and a no-op at the worker for callees (e.g. Android) that never registered a VoIP token.
+ *
+ * `offerSdp` is our raw local offer SDP; it's candidate-stripped here and forwarded in the push as
+ * `offerSDP` so a cold-woken iOS callee can set its remote description straight from the push instead
+ * of polling its swarm for the offer over onion (the step that made background calls flaky). May be
+ * empty/omitted → callee falls back to fetching the offer from its swarm.
  */
 export async function apocentroPushWake(
   to: string,
   uuid: string,
   caller: string,
-  contactName: string
+  contactName: string,
+  offerSdp: string = ''
 ): Promise<void> {
   if (!to) {
     window?.log?.warn('[ApocentroPushRelay] skipped: empty recipient');
@@ -36,15 +58,20 @@ export async function apocentroPushWake(
     const timeout = setTimeout(() => controller.abort(), 10_000);
     // The worker requires the timestamp to be within 60s of now, so stamp it at send time.
     const timestamp = Date.now();
+    const safeSdp = pushSafeOfferSdp(offerSdp);
+    const body: Record<string, unknown> = { to, uuid, caller, timestamp, contactName };
+    if (safeSdp) {
+      body.sdp = safeSdp;
+    }
     window?.log?.info(
       `[ApocentroPushRelay] POST ${PUSH_RELAY_URL}/push to=…${to6} uuid=…${uuid6} caller=…${caller.slice(
         -6
-      )} ts=${timestamp}`
+      )} ts=${timestamp} sdp=${safeSdp ? `${safeSdp.length}b` : 'none'}`
     );
     const res = await fetch(`${PUSH_RELAY_URL}/push`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ to, uuid, caller, timestamp, contactName }),
+      body: JSON.stringify(body),
       signal: controller.signal,
     });
     clearTimeout(timeout);
@@ -89,9 +116,15 @@ export async function apocentroNotify(
   if (!to) {
     return;
   }
+  const to6 = to.slice(-6);
   try {
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10_000);
+    window?.log?.info(
+      `[ApocentroPushRelay] POST ${PUSH_RELAY_URL}/notify to=…${to6} ns=${namespace} enc=${
+        enc ? `${enc.length}b` : 'none'
+      } ts=${timestamp}`
+    );
     const res = await fetch(`${PUSH_RELAY_URL}/notify`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -99,8 +132,13 @@ export async function apocentroNotify(
       signal: controller.signal,
     });
     clearTimeout(timeout);
-    if (!res.ok) {
-      window?.log?.warn(`[ApocentroPushRelay] notify returned ${res.status} to=…${to.slice(-6)}`);
+    if (res.ok) {
+      window?.log?.info(`[ApocentroPushRelay] notify OK (${res.status}) to=…${to6}`);
+    } else {
+      const errBody = await res.text().catch(() => '<no body>');
+      window?.log?.warn(
+        `[ApocentroPushRelay] notify FAILED status=${res.status} to=…${to6} body=${errBody.slice(0, 200)}`
+      );
     }
   } catch (e) {
     window?.log?.warn(
