@@ -91,9 +91,10 @@ function armApocentroPushFallback(recipient: string, uuid: string) {
       window.log.info(
         `[ApocentroPushRelay] fallback firing for uuid=…${uuid.slice(-6)} (pc state=${state ?? 'none'})`
       );
-      // contactName left empty on purpose: avoids leaking a display name to the relay; the callee
-      // resolves who is calling from `caller` once it wakes.
-      void apocentroPushWake(recipient, uuid, caller, '', offerSdp);
+      // Send our display name so the callee's CallKit screen shows a name instead of the raw
+      // session id — same trade-off Android already makes (the relay sees the display name).
+      const contactName = ConvoHub.use().get(caller)?.getRealSessionUsername() || '';
+      void apocentroPushWake(recipient, uuid, caller, contactName, offerSdp);
     } else {
       window.log.info(
         `[ApocentroPushRelay] fallback skipped (stillCurrent=${stillCurrent} pc state=${state ?? 'none'})`
