@@ -15,8 +15,8 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - claude/apocentro-web-recovery-q13fec
-      - claude/tine-apocentro-folk-calling-rl7c5j
+      - apocentro-desktop
+      - claude/apocentro-voip-push-fallback
 
 concurrency:
   group: apocentro-build-${{ github.ref }}

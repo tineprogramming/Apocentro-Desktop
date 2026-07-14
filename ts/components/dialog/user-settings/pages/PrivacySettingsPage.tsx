@@ -31,6 +31,7 @@ import { SettingsKey } from '../../../../data/settings-key';
 import { getPasswordHash, Storage } from '../../../../util/storage';
 import { SettingsToggleBasic } from '../components/SettingsToggleBasic';
 import { SettingsPanelButtonInlineBasic } from '../components/SettingsPanelButtonInlineBasic';
+import { saveLogToDesktop } from '../../../../util/logger/renderer_process_logging';
 import { UserSettingsModalContainer } from '../components/UserSettingsModalContainer';
 import { UserConfigWrapperActions } from '../../../../webworker/workers/browser/libsession/libsession_worker_userconfig_interface';
 import { toggleGiphyIntegration } from '../actions/toggleGiphyIntegration';
@@ -327,6 +328,20 @@ export function PrivacySettingsPage(modalState: UserSettingsModalState) {
 
       <PanelLabelWithDescription title={{ token: 'passwords' }} />
       <PasswordSubSection />
+
+      {/* Apocentro: expose Export Logs here too (mirrors iOS Privacy), so it's easy to find when
+          diagnosing calls/notifications — not only under Help. */}
+      <PanelLabelWithDescription title={{ token: 'logs' }} />
+      <PanelButtonGroup>
+        <SettingsPanelButtonInlineBasic
+          baseDataTestId="export-logs"
+          text={{ token: 'helpReportABug' }}
+          subText={{ token: 'helpReportABugExportLogsSaveToDesktopDescription' }}
+          onClick={async () => saveLogToDesktop()}
+          buttonColor={SessionButtonColor.PrimaryDark}
+          buttonText={tr('helpReportABugExportLogs')}
+        />
+      </PanelButtonGroup>
     </UserSettingsModalContainer>
   );
 }

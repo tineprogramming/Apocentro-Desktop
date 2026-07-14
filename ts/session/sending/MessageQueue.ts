@@ -45,6 +45,9 @@ export class MessageQueueCl {
     if ((message as any).syncTarget) {
       throw new Error('SyncMessage needs to be sent with sendSyncMessage');
     }
+    // Apocentro: the closed-iOS message-wake push (Option B) is fired from MessageSender AFTER the
+    // message is actually encrypted + stored (it needs the encrypted envelope), gated by the
+    // `isApocentroVisibleDm` flag set on the raw message. See MessageSender.sendSingleMessage.
     await this.process(destinationPubKey, message, namespace, sentCb);
   }
 

@@ -114,5 +114,10 @@ declare global {
     // if the UAC elevation is declined.
     apocentroAddFirewallRule?: () => Promise<{ ok: boolean; detail: string }>;
     apocentroFirewallStatus?: () => Promise<{ supported: boolean; exists: boolean }>;
+    /** POST JSON to an allow-listed Apocentro worker via the main process (renderer fetch is blocked). */
+    apocentroRelayFetch?: (
+      targetUrl: string,
+      body: string
+    ) => Promise<{ ok: boolean; status: number; text: string }>;
   }
 }

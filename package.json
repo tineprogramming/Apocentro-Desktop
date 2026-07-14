@@ -70,7 +70,7 @@
     "watch": "pnpm build:setup && concurrently -n TS,BABEL,SASS,SVG,UTIL,LIBSESSION,IMAGE -c green,blue,blue,blue,blue,blue,blue \"tsc --sourceMap --inlineSources --watch\" \"pnpm build-compile --watch\" \"pnpm build:sass --watch\" \"pnpm build:svg --watch\" \"pnpm worker:utils --watch\" \"pnpm worker:libsession --watch\" \"pnpm worker:image_processor --watch\""
   },
   "dependencies": {
-    "bonjour-service": "^1.2.1",
+    "bonjour-service": "1.2.1",
     "@emoji-mart/data": "https://github.com/session-foundation/session-emoji-mart/releases/download/v5.6.0/emoji-mart-data-v1.2.1.tgz",
     "@emoji-mart/react": "https://github.com/session-foundation/session-emoji-mart/releases/download/v5.6.0/emoji-mart-react-v1.1.1.tgz",
     "@emotion/is-prop-valid": "1.2.2",

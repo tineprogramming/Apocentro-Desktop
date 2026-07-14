@@ -44,19 +44,36 @@ export async function getApocentroIceServers(): Promise<Array<RTCIceServer>> {
   }
 
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 5000);
-    const res = await fetch(TURN_CREDENTIALS_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ ttl: TURN_TTL_SECONDS }),
-      signal: controller.signal,
-    });
-    clearTimeout(timeout);
-    if (!res.ok) {
-      throw new Error(`TURN worker returned ${res.status}`);
+    // Prefer the main-process IPC bridge: a direct renderer fetch to the worker dies instantly
+    // ("Failed to fetch") under the renderer's network policy, even though the URL works in a
+    // system browser. Falls back to a plain fetch when the bridge isn't there (dev/tests).
+    const requestBody = JSON.stringify({ ttl: TURN_TTL_SECONDS });
+    let status: number;
+    let text: string;
+    if (window?.apocentroRelayFetch) {
+      const ipcRes = await window.apocentroRelayFetch(TURN_CREDENTIALS_URL, requestBody);
+      status = ipcRes.status;
+      text = ipcRes.text;
+      if (!ipcRes.ok) {
+        throw new Error(`TURN worker returned ${status} (${text.slice(0, 120)})`);
+      }
+    } else {
+      const controller = new AbortController();
+      const timeout = setTimeout(() => controller.abort(), 5000);
+      const res = await fetch(TURN_CREDENTIALS_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: requestBody,
+        signal: controller.signal,
+      });
+      clearTimeout(timeout);
+      status = res.status;
+      text = await res.text();
+      if (!res.ok) {
+        throw new Error(`TURN worker returned ${status}`);
+      }
     }
-    const json = (await res.json()) as CloudflareIceResponse;
+    const json = JSON.parse(text) as CloudflareIceResponse;
     const raw = json.iceServers;
     const servers: Array<RTCIceServer> = Array.isArray(raw) ? raw : raw ? [raw] : [];
     if (!servers.length) {

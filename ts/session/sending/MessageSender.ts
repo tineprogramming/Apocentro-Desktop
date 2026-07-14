@@ -52,6 +52,7 @@ import { PubKey } from '../types';
 import { OutgoingRawMessage } from '../types/RawMessage';
 import { UserUtils } from '../utils';
 import { ed25519Str, fromUInt8ArrayToBase64 } from '../utils/String';
+import { apocentroNotify } from '../utils/calling/ApocentroPushRelay';
 import { MessageSentHandler } from './MessageSentHandler';
 import { EncryptAndWrapMessageResults, MessageWrapper } from './MessageWrapper';
 import { SaveSeenMessageHash, stringify } from '../../types/sqlSharedTypes';
@@ -307,6 +308,27 @@ async function sendSingleMessage({
         });
 
         await handleBatchResultWithSubRequests({ batchResult, subRequests, destination });
+
+        // Apocentro: nudge a closed/screen-off recipient so their iOS NSE wakes and decrypts the
+        // message (Option B — envelope-in-push). We hand the worker the exact encrypted envelope we
+        // just stored (magic bytes included) + its swarm metadata; the callee's NSE decrypts it
+        // on-device with its identity key (no swarm poll). Fire-and-forget after the store succeeds;
+        // only real 1:1 chat messages (isApocentroVisibleDm), never sync copies or note-to-self. A
+        // no-op at the worker for callees (e.g. Android/Desktop) without a registered APNs token.
+        if (
+          message.isApocentroVisibleDm &&
+          PubKey.is05Pubkey(destination) &&
+          !UserUtils.isUsFromCache(destination) &&
+          !isSyncMessage
+        ) {
+          void apocentroNotify(
+            destination,
+            fromUInt8ArrayToBase64(encryptedAndWrapped.encryptedAndWrappedData),
+            message.namespace,
+            encryptedAndWrapped.networkTimestamp
+          );
+        }
+
         return {
           wrappedEnvelope: encryptedAndWrapped.encryptedAndWrappedData,
           effectiveTimestamp: encryptedAndWrapped.networkTimestamp,

@@ -59,6 +59,8 @@ window.apocentroLan = {
 // Windows-only: add / check a Windows Firewall exception for offline LAN calls.
 window.apocentroAddFirewallRule = () => ipc.invoke('apocentro-firewall:add');
 window.apocentroFirewallStatus = () => ipc.invoke('apocentro-firewall:status');
+// Apocentro: POST to our workers via the MAIN process (renderer fetches to them are blocked).
+window.apocentroRelayFetch = (targetUrl, body) => ipc.invoke('apocentro-relay-fetch', targetUrl, body);
 window.getOSRelease = () =>
   `${os.type()} ${os.release()}, Node.js ${config.node_version} ${os.platform()} ${os.arch()}`;
 window.saveLog = () => ipc.send('export-logs');

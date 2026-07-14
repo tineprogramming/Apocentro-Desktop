@@ -601,6 +601,40 @@ ipc.handle('apocentro-firewall:add', async () => {
     return { ok: false, detail: e instanceof Error ? e.message : String(e) };
   }
 });
+// Apocentro: POST to our Cloudflare workers (push relay / TURN creds) from the MAIN process on the
+// renderer's behalf. Direct renderer fetches to these hosts die instantly ("Failed to fetch" in
+// ~1ms) under the renderer's network policy even though the same URLs load fine in a system
+// browser, so the renderer invokes this over IPC and the request happens here in Node (undici) —
+// no CORS, no CSP, no renderer session. Allow-listed hosts only: this must not become an open proxy.
+const APOCENTRO_RELAY_HOSTS = new Set([
+  'apocentro-push.none-reply.workers.dev',
+  'apocentro-turn-creds.none-reply.workers.dev',
+]);
+ipc.handle('apocentro-relay-fetch', async (_event, url: string, body: string) => {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== 'https:' || !APOCENTRO_RELAY_HOSTS.has(parsed.host)) {
+      return { ok: false, status: 0, text: 'blocked: host not allow-listed' };
+    }
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 10_000);
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body,
+      signal: controller.signal,
+    });
+    clearTimeout(timeout);
+    const text = await res.text().catch(() => '');
+    return { ok: res.ok, status: res.status, text };
+  } catch (e) {
+    return {
+      ok: false,
+      status: 0,
+      text: e instanceof Error ? `${e.name}: ${e.message}` : String(e),
+    };
+  }
+});
 // Windows: is our firewall allow-rule already present? Read-only (no elevation),
 // so the settings UI can show "already allowed" instead of prompting again. The
 // installer adds this rule automatically on install, so most users never need
