@@ -15,6 +15,36 @@
 const PUSH_RELAY_URL = 'https://apocentro-push.none-reply.workers.dev';
 
 /**
+ * POST JSON to the relay. Goes through the MAIN process over IPC (`apocentroRelayFetch`): a direct
+ * renderer fetch to the worker dies instantly ("Failed to fetch") under the renderer's network
+ * policy, even though the same URL works in a system browser. Falls back to a plain fetch when the
+ * IPC bridge isn't there (dev/tests).
+ */
+async function relayPost(
+  url: string,
+  body: Record<string, unknown>
+): Promise<{ ok: boolean; status: number; text: string }> {
+  const serialized = JSON.stringify(body);
+  if (window?.apocentroRelayFetch) {
+    return window.apocentroRelayFetch(url, serialized);
+  }
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), 10_000);
+  try {
+    const res = await fetch(url, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: serialized,
+      signal: controller.signal,
+    });
+    const text = await res.text().catch(() => '');
+    return { ok: res.ok, status: res.status, text };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+/**
  * Strip the private (host/srflx/prflx) ICE candidate lines from an offer SDP, keeping relay
  * candidates, so the offer fits inside the APNs VoIP push. Mirrors the Android caller. The real
  * candidates still trickle over the swarm; the callee only needs the media/codec sections to set
@@ -54,8 +84,6 @@ export async function apocentroPushWake(
   const to6 = to.slice(-6);
   const uuid6 = uuid.slice(-6);
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10_000);
     // The worker requires the timestamp to be within 60s of now, so stamp it at send time.
     const timestamp = Date.now();
     const safeSdp = pushSafeOfferSdp(offerSdp);
@@ -66,22 +94,17 @@ export async function apocentroPushWake(
     window?.log?.info(
       `[ApocentroPushRelay] POST ${PUSH_RELAY_URL}/push to=…${to6} uuid=…${uuid6} caller=…${caller.slice(
         -6
-      )} ts=${timestamp} sdp=${safeSdp ? `${safeSdp.length}b` : 'none'}`
+      )} ts=${timestamp} sdp=${safeSdp ? `${safeSdp.length}b` : 'none'} via=${
+        window?.apocentroRelayFetch ? 'main-ipc' : 'renderer-fetch'
+      }`
     );
-    const res = await fetch(`${PUSH_RELAY_URL}/push`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body),
-      signal: controller.signal,
-    });
-    clearTimeout(timeout);
+    const res = await relayPost(`${PUSH_RELAY_URL}/push`, body);
     if (res.ok) {
       window?.log?.info(`[ApocentroPushRelay] push OK (${res.status}) to=…${to6} uuid=…${uuid6}`);
     } else {
-      // Read the worker's error body so a rejection (bad timestamp, rate limit, etc.) is visible.
-      const body = await res.text().catch(() => '<no body>');
+      // Surface the worker's error body so a rejection (bad timestamp, rate limit, etc.) is visible.
       window?.log?.warn(
-        `[ApocentroPushRelay] push FAILED status=${res.status} to=…${to6} body=${body.slice(0, 300)}`
+        `[ApocentroPushRelay] push FAILED status=${res.status} to=…${to6} body=${res.text.slice(0, 300)}`
       );
     }
   } catch (e) {
@@ -118,26 +141,17 @@ export async function apocentroNotify(
   }
   const to6 = to.slice(-6);
   try {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10_000);
     window?.log?.info(
       `[ApocentroPushRelay] POST ${PUSH_RELAY_URL}/notify to=…${to6} ns=${namespace} enc=${
         enc ? `${enc.length}b` : 'none'
-      } ts=${timestamp}`
+      } ts=${timestamp} via=${window?.apocentroRelayFetch ? 'main-ipc' : 'renderer-fetch'}`
     );
-    const res = await fetch(`${PUSH_RELAY_URL}/notify`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ to, enc, namespace, timestamp }),
-      signal: controller.signal,
-    });
-    clearTimeout(timeout);
+    const res = await relayPost(`${PUSH_RELAY_URL}/notify`, { to, enc, namespace, timestamp });
     if (res.ok) {
       window?.log?.info(`[ApocentroPushRelay] notify OK (${res.status}) to=…${to6}`);
     } else {
-      const errBody = await res.text().catch(() => '<no body>');
       window?.log?.warn(
-        `[ApocentroPushRelay] notify FAILED status=${res.status} to=…${to6} body=${errBody.slice(0, 200)}`
+        `[ApocentroPushRelay] notify FAILED status=${res.status} to=…${to6} body=${res.text.slice(0, 200)}`
       );
     }
   } catch (e) {

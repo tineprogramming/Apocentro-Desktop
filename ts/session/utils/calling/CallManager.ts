@@ -65,21 +65,34 @@ let apocentroPushFallbackTimer: ReturnType<typeof setTimeout> | null = null;
 function armApocentroPushFallback(recipient: string, uuid: string) {
   const caller = UserUtils.getOurPubKeyStrFromCache();
   cancelApocentroPushFallback();
-  apocentroPushFallbackTimer = setTimeout(() => {
+  // eslint-disable-next-line @typescript-eslint/no-misused-promises
+  apocentroPushFallbackTimer = setTimeout(async () => {
     apocentroPushFallbackTimer = null;
     // Still the same call, and not yet connected? Then the callee may be asleep — wake them.
     const stillCurrent = currentCallUUID === uuid;
     const state = peerConnection?.connectionState;
     if (stillCurrent && state !== 'connected') {
+      // Carry our offer SDP in the push (candidate-stripped inside apocentroPushWake) so a cold-woken
+      // iOS callee can set its remote description straight from the push instead of polling the swarm
+      // for the offer over onion — the step that made desktop→closed-iOS calls ring but not connect.
+      // Opening the mic/camera can take longer than this timer on Windows, so the local offer may not
+      // exist yet when we fire; wait briefly for it (still well within the ring window) rather than
+      // sending a wake the callee can't act on.
+      let offerSdp = peerConnection?.localDescription?.sdp ?? '';
+      for (let i = 0; i < 10 && !offerSdp; i++) {
+        // eslint-disable-next-line no-await-in-loop
+        await sleepFor(250);
+        if (currentCallUUID !== uuid) {
+          window.log.info('[ApocentroPushRelay] fallback aborted while waiting for the local offer');
+          return;
+        }
+        offerSdp = peerConnection?.localDescription?.sdp ?? '';
+      }
       window.log.info(
         `[ApocentroPushRelay] fallback firing for uuid=…${uuid.slice(-6)} (pc state=${state ?? 'none'})`
       );
       // contactName left empty on purpose: avoids leaking a display name to the relay; the callee
       // resolves who is calling from `caller` once it wakes.
-      // Carry our offer SDP in the push (candidate-stripped inside apocentroPushWake) so a cold-woken
-      // iOS callee can set its remote description straight from the push instead of polling the swarm
-      // for the offer over onion — the step that made desktop→closed-iOS calls ring but not connect.
-      const offerSdp = peerConnection?.localDescription?.sdp ?? '';
       void apocentroPushWake(recipient, uuid, caller, '', offerSdp);
     } else {
       window.log.info(
