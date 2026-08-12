@@ -93,9 +93,20 @@ jobs:
           upload_prefix: windows-x64
 
   mac:
-    runs-on: macos-14
+    runs-on: ${{ matrix.runner }}
     timeout-minutes: 40
-    name: "mac arm64 (unsigned)"
+    strategy:
+      fail-fast: false
+      matrix:
+        # Native runner per architecture — electron-builder targets the host
+        # arch, so no cross-compiling of native modules (libsession-util etc.).
+        # macos-15-intel is GitHub's Intel runner label (macos-13 was retired).
+        include:
+          - runner: macos-14
+            arch: arm64
+          - runner: macos-15-intel
+            arch: x64
+    name: "mac ${{ matrix.arch }} (unsigned)"
     # Unsigned mac builds can fail depending on the signing/notarize hooks, so
     # don't let it block the Linux/Windows artifacts.
     continue-on-error: true
@@ -110,7 +121,7 @@ jobs:
       - name: Setup
         uses: ./actions/setup
         with:
-          cache_suffix: mac-arm64
+          cache_suffix: mac-${{ matrix.arch }}
 
       - name: Enforce static builds for libsession-util-nodejs
         uses: ./actions/enforce_static_builds
@@ -126,4 +137,4 @@ jobs:
       - name: Upload installer
         uses: ./actions/upload_prod_artefacts
         with:
-          upload_prefix: mac-arm64
+          upload_prefix: mac-${{ matrix.arch }}
