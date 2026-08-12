@@ -29,6 +29,9 @@ const TOKEN_BYTES = 10;
 const CONNECT_TIMEOUT_MS = 700;
 const UNREACHABLE_TTL_MS = 30_000;
 const MAX_FRAME_BYTES = 256 * 1024;
+// How long an interface whose mDNS socket failed to bind (e.g. EADDRINUSE on
+// port 5353) stays excluded before we try it again.
+const MDNS_FAILED_RETRY_MS = 5 * 60_000;
 
 type PeerAddr = { host: string; port: number };
 export type DiscoveredPeer = { pubkey: string; host: string; port: number };
@@ -96,6 +99,12 @@ class ApocentroLan extends EventEmitter {
   private netWatchTimer: NodeJS.Timeout | null = null;
   private currentIps: Array<string> = [];
 
+  // interface key ('default' or an IPv4) -> when its mDNS socket errored (bind
+  // failed etc.); excluded from rebuilds until MDNS_FAILED_RETRY_MS passes or
+  // the network changes
+  private failedInterfaces = new Map<string, number>();
+  private mdnsRebuildPending = false;
+
   private log(message: string): void {
     // eslint-disable-next-line no-console
     console.log(`[ApocentroLan] ${message}`);
@@ -118,28 +127,21 @@ class ApocentroLan extends EventEmitter {
     );
 
     this.currentIps = ourIpv4s();
-    // Create one instance bound to each interface; fall back to a default
-    // instance if we can't enumerate any IPv4. IMPORTANT: pass an error callback
-    // — without one, bonjour-service rethrows mDNS socket errors (e.g. a dgram
-    // EADDRNOTAVAIL when the Wi-Fi changes and an interface IP disappears), which
-    // crashes the whole app. With it, we just log and keep running.
-    const optsList: Array<Record<string, unknown>> = this.currentIps.length
-      ? this.currentIps.map(ip => ({ interface: ip }))
-      : [{}];
-    this.bonjours = optsList.map(
-      opts =>
-        new Bonjour(opts, (err: Error) => this.log(`mDNS socket error (ignored): ${err.message}`))
-    );
-    this.log(
-      `created ${this.bonjours.length} mDNS instance(s) on: ${this.currentIps.join(', ') || 'default'}`
-    );
+    this.bonjours = this.createBonjourInstances(this.currentIps);
     this.advertise();
     this.startBrowsing();
 
     // Watch for network changes (Wi-Fi switch): when our interface set changes,
     // rebuild the mDNS instances so we bind the new interface and stop touching
-    // the old (now-invalid) one.
-    this.netWatchTimer = setInterval(() => this.checkNetworkChange(), 5_000);
+    // the old (now-invalid) one. The try/catch keeps a failure inside the tick
+    // from becoming an uncaughtException (which would kill the app).
+    this.netWatchTimer = setInterval(() => {
+      try {
+        this.checkNetworkChange();
+      } catch (e) {
+        this.log(`network watch tick failed (ignored): ${(e as Error).message}`);
+      }
+    }, 5_000);
 
     // Re-advertise + rebuild the contact index each hour when the token rotates.
     this.rotateTimer = setInterval(() => {
@@ -192,6 +194,8 @@ class ApocentroLan extends EventEmitter {
     this.learnedPeers.clear();
     this.unreachable.clear();
     this.contactTokenIndex.clear();
+    this.failedInterfaces.clear();
+    this.mdnsRebuildPending = false;
   }
 
   public updateContacts(contactPubKeys: Array<string>): void {
@@ -274,10 +278,109 @@ class ApocentroLan extends EventEmitter {
     const ips = ourIpv4s();
     const changed =
       ips.length !== this.currentIps.length || ips.some(ip => !this.currentIps.includes(ip));
-    if (!changed) {
+
+    // Interfaces whose mDNS socket errored (e.g. port 5353 held by another app)
+    // get retried after a cool-down — the other app may have quit.
+    const now = Date.now();
+    let cooledDown = false;
+    for (const [key, failedAt] of this.failedInterfaces) {
+      if (now - failedAt > MDNS_FAILED_RETRY_MS) {
+        this.failedInterfaces.delete(key);
+        cooledDown = true;
+      }
+    }
+
+    if (!changed && !cooledDown) {
       return;
     }
-    this.log(`network changed: [${this.currentIps.join(',')}] → [${ips.join(',')}], rebuilding mDNS`);
+    if (changed) {
+      // A different network is a fresh start: try every interface again.
+      this.failedInterfaces.clear();
+      this.discoveredPeers.clear();
+      this.log(
+        `network changed: [${this.currentIps.join(',')}] → [${ips.join(',')}], rebuilding mDNS`
+      );
+    }
+    this.currentIps = ips;
+    this.rebuildMdns(changed ? 'network changed' : 'retrying previously failed interface(s)');
+  }
+
+  /**
+   * Create one Bonjour instance per usable IPv4 interface (or a single default
+   * instance when none can be enumerated), skipping interfaces whose mDNS
+   * socket recently failed to bind.
+   *
+   * IMPORTANT: pass an error callback to the constructor — without one,
+   * bonjour-service rethrows respond() errors, which crashes the whole app.
+   * ALSO IMPORTANT: bonjour-service does NOT forward its underlying
+   * multicast-dns socket 'error' events to that callback (they are a separate,
+   * unlistened EventEmitter 'error' — which Node turns into an
+   * uncaughtException). That is exactly what crashed macOS builds with
+   * "bind EADDRINUSE <ip>:5353" when another app held the mDNS port
+   * exclusively. So we attach our own 'error'/'warning' listeners to the
+   * multicast-dns instance and degrade to no-LAN on that interface instead.
+   */
+  private createBonjourInstances(ips: Array<string>): Array<Bonjour> {
+    const keys = ips.length ? ips : ['default'];
+    const usable = keys.filter(key => !this.failedInterfaces.has(key));
+    if (!usable.length) {
+      this.log(
+        'mDNS unavailable on every interface (UDP port 5353 conflict?) — LAN discovery is off; messaging/calls use the internet path. Will retry when the network changes or after cool-down.'
+      );
+      return [];
+    }
+
+    const instances: Array<Bonjour> = [];
+    for (const key of usable) {
+      const opts: Record<string, unknown> = key === 'default' ? {} : { interface: key };
+      try {
+        const bonjour = new Bonjour(opts, (err: Error) =>
+          this.log(`mDNS socket error (ignored): ${err.message}`)
+        );
+        const mdns = (
+          bonjour as unknown as { server?: { mdns?: NodeJS.EventEmitter } }
+        ).server?.mdns;
+        mdns?.on('error', (err: Error) => {
+          this.log(
+            `mDNS failed on ${key} (${err.message}) — LAN discovery disabled on this interface for now; likely another app owns UDP port 5353`
+          );
+          this.failedInterfaces.set(key, Date.now());
+          this.scheduleMdnsRebuild();
+        });
+        mdns?.on('warning', (err: Error) =>
+          this.log(`mDNS warning on ${key} (ignored): ${err.message}`)
+        );
+        instances.push(bonjour);
+      } catch (e) {
+        this.log(`failed to create mDNS instance on ${key} (ignored): ${(e as Error).message}`);
+        this.failedInterfaces.set(key, Date.now());
+      }
+    }
+    this.log(`created ${instances.length} mDNS instance(s) on: ${usable.join(', ')}`);
+    return instances;
+  }
+
+  /** Debounced full teardown + re-create of the mDNS layer, minus failed interfaces. */
+  private scheduleMdnsRebuild(): void {
+    if (this.mdnsRebuildPending || !this.running) {
+      return;
+    }
+    this.mdnsRebuildPending = true;
+    setTimeout(() => {
+      this.mdnsRebuildPending = false;
+      if (!this.running) {
+        return;
+      }
+      try {
+        this.rebuildMdns('mDNS socket error');
+      } catch (e) {
+        this.log(`mDNS rebuild failed (ignored): ${(e as Error).message}`);
+      }
+    }, 200);
+  }
+
+  private rebuildMdns(reason: string): void {
+    this.log(`rebuilding mDNS (${reason})`);
     this.browsers.forEach(b => {
       try {
         b.stop();
@@ -295,15 +398,7 @@ class ApocentroLan extends EventEmitter {
     });
     this.bonjours = [];
     this.publisheds = [];
-    this.discoveredPeers.clear();
-    this.currentIps = ips;
-    const optsList: Array<Record<string, unknown>> = ips.length
-      ? ips.map(ip => ({ interface: ip }))
-      : [{}];
-    this.bonjours = optsList.map(
-      opts =>
-        new Bonjour(opts, (err: Error) => this.log(`mDNS socket error (ignored): ${err.message}`))
-    );
+    this.bonjours = this.createBonjourInstances(this.currentIps);
     this.advertise();
     this.startBrowsing();
   }
@@ -320,14 +415,22 @@ class ApocentroLan extends EventEmitter {
         /* ignore */
       }
     });
-    this.publisheds = this.bonjours.map(bonjour =>
-      bonjour.publish({
-        name: `apocentro-${token}`,
-        type: SERVICE_TYPE,
-        port: this.tcpPort,
-        txt: { [ATTR_TOKEN]: token },
-      })
-    );
+    this.publisheds = this.bonjours.flatMap(bonjour => {
+      try {
+        return [
+          bonjour.publish({
+            name: `apocentro-${token}`,
+            type: SERVICE_TYPE,
+            port: this.tcpPort,
+            txt: { [ATTR_TOKEN]: token },
+          }),
+        ];
+      } catch (e) {
+        // e.g. the instance's socket died between rebuilds — never let this crash
+        this.log(`mDNS publish failed (ignored): ${(e as Error).message}`);
+        return [];
+      }
+    });
     this.log(`advertising _${SERVICE_TYPE}._tcp name=apocentro-${token} port=${this.tcpPort}`);
   }
 
@@ -339,17 +442,22 @@ class ApocentroLan extends EventEmitter {
       clearInterval(this.rebrowseTimer);
       this.rebrowseTimer = null;
     }
-    this.browsers = this.bonjours.map(bonjour => {
-      const browser = bonjour.find({ type: SERVICE_TYPE });
-      browser.on('up', (service: Service) => this.onServiceUp(service));
-      // Intentionally do NOT drop the peer on 'down': mDNS services flap (missed
-      // announcements, brief sleeps) and dropping them makes discovery unreliable
-      // right when a call starts. We keep the last known address; the 30s negative
-      // cache handles an address that has genuinely gone away.
-      browser.on('down', (service: Service) => {
-        this.log(`mDNS service down: ${service.name} (keeping last known address)`);
-      });
-      return browser;
+    this.browsers = this.bonjours.flatMap(bonjour => {
+      try {
+        const browser = bonjour.find({ type: SERVICE_TYPE });
+        browser.on('up', (service: Service) => this.onServiceUp(service));
+        // Intentionally do NOT drop the peer on 'down': mDNS services flap (missed
+        // announcements, brief sleeps) and dropping them makes discovery unreliable
+        // right when a call starts. We keep the last known address; the 30s negative
+        // cache handles an address that has genuinely gone away.
+        browser.on('down', (service: Service) => {
+          this.log(`mDNS service down: ${service.name} (keeping last known address)`);
+        });
+        return [browser];
+      } catch (e) {
+        this.log(`mDNS browse failed (ignored): ${(e as Error).message}`);
+        return [];
+      }
     });
 
     // Re-issue the browse query so we recover quickly from missed announcements
