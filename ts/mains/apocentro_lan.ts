@@ -58,6 +58,15 @@ function tokenFor(pkHex: string, epoch: number): string {
     .toString('hex');
 }
 
+/** Run a short shell command, resolving with its stdout ('' on any failure). */
+function execString(command: string): Promise<string> {
+  return new Promise(resolve => {
+    exec(command, { timeout: 3_000, windowsHide: true }, (_error, stdout) =>
+      resolve(String(stdout || ''))
+    );
+  });
+}
+
 function ourIpv4s(): Array<string> {
   const out: Array<string> = [];
   const ifaces = networkInterfaces();
@@ -414,37 +423,84 @@ class ApocentroLan extends EventEmitter {
   }
 
   /**
-   * List process names (other than our own process and the OS's mDNSResponder,
-   * which coexists fine) that have UDP 5353 open. macOS/Linux only — uses
-   * unprivileged lsof, which can see the user's own apps; those are exactly the
-   * ones that grab 5353 exclusively and break our bind.
+   * List process names (other than our own process and the OS's own mDNS
+   * service, which coexists fine) that have UDP 5353 open — those are exactly
+   * the apps that grab 5353 exclusively and break our bind. Best-effort; an
+   * empty list means "could not tell".
    */
   private async findMdnsPortOwners(): Promise<Array<string>> {
-    if (process.platform !== 'darwin' && process.platform !== 'linux') {
+    try {
+      if (process.platform === 'darwin' || process.platform === 'linux') {
+        return await this.findMdnsPortOwnersUnix();
+      }
+      if (process.platform === 'win32') {
+        return await this.findMdnsPortOwnersWindows();
+      }
+    } catch {
+      // fall through — detection is best-effort only
+    }
+    return [];
+  }
+
+  /** macOS/Linux: unprivileged lsof sees the user's own apps. */
+  private async findMdnsPortOwnersUnix(): Promise<Array<string>> {
+    // -F pc → machine-readable "p<pid>" / "c<command>" line pairs
+    const stdout = await execString('lsof -nP -iUDP:5353 -F pc');
+    const apps = new Set<string>();
+    let pid = '';
+    for (const line of stdout.split('\n')) {
+      if (line.startsWith('p')) {
+        pid = line.slice(1).trim();
+      } else if (line.startsWith('c')) {
+        const name = line.slice(1).trim();
+        // mDNSResponder is macOS's own shared-bind daemon, not the culprit
+        if (name && pid !== String(process.pid) && name !== 'mDNSResponder') {
+          apps.add(name);
+        }
+      }
+    }
+    return Array.from(apps);
+  }
+
+  /** Windows: netstat lists the PIDs on the port, tasklist maps PID → exe name. */
+  private async findMdnsPortOwnersWindows(): Promise<Array<string>> {
+    const netstatOut = await execString('netstat -ano -p UDP');
+    const pids = new Set<string>();
+    for (const rawLine of netstatOut.split('\n')) {
+      //   UDP    0.0.0.0:5353    *:*    1234   (local address may also be [::]:5353)
+      const parts = rawLine.trim().split(/\s+/);
+      if (parts.length < 3 || parts[0].toUpperCase() !== 'UDP' || !/:5353$/.test(parts[1])) {
+        continue;
+      }
+      const pid = parts[parts.length - 1];
+      // 0 = Idle, 4 = System — never the exclusive holder we're looking for
+      if (/^\d+$/.test(pid) && pid !== '0' && pid !== '4' && pid !== String(process.pid)) {
+        pids.add(pid);
+      }
+    }
+    if (!pids.size) {
       return [];
     }
-    return new Promise(resolve => {
-      // -F pc → machine-readable "p<pid>" / "c<command>" line pairs
-      exec('lsof -nP -iUDP:5353 -F pc', { timeout: 3_000 }, (_error, stdout) => {
-        try {
-          const apps = new Set<string>();
-          let pid = '';
-          for (const line of String(stdout || '').split('\n')) {
-            if (line.startsWith('p')) {
-              pid = line.slice(1).trim();
-            } else if (line.startsWith('c')) {
-              const name = line.slice(1).trim();
-              if (name && pid !== String(process.pid) && name !== 'mDNSResponder') {
-                apps.add(name);
-              }
-            }
-          }
-          resolve(Array.from(apps));
-        } catch {
-          resolve([]);
-        }
-      });
-    });
+
+    const tasklistOut = await execString('tasklist /FO CSV /NH');
+    const nameByPid = new Map<string, string>();
+    for (const line of tasklistOut.split('\n')) {
+      // "chrome.exe","1234","Console","1","123,456 K"
+      const m = line.match(/^"([^"]+)","(\d+)"/);
+      if (m) {
+        nameByPid.set(m[2], m[1]);
+      }
+    }
+
+    const apps = new Set<string>();
+    for (const pid of pids) {
+      const name = nameByPid.get(pid);
+      // svchost hosts Windows' own shared-bind mDNS (Dnscache), not the culprit
+      if (name && name.toLowerCase() !== 'svchost.exe') {
+        apps.add(name);
+      }
+    }
+    return Array.from(apps);
   }
 
   private rebuildMdns(reason: string): void {
