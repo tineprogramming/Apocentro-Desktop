@@ -27,6 +27,38 @@ const ATTR_TOKEN = 't';
 const EPOCH_MS = 3_600_000; // rotate the discovery token hourly
 const TOKEN_BYTES = 10;
 const CONNECT_TIMEOUT_MS = 700;
+
+/**
+ * Create the mDNS instances for a set of interface options, tolerating a failed bind.
+ *
+ * macOS keeps its own `mDNSResponder` bound to UDP 5353 for the lifetime of the OS, so binding it
+ * exclusively throws `EADDRINUSE` — on Windows/Linux the port is usually free, which is why this
+ * only ever showed up on Macs (as an "Unhandled Error" dialog that killed the app at startup).
+ * We therefore ask for a shared bind (`reuseAddr`) and, if the bind still throws, skip that
+ * instance: LAN discovery degrades to "no peers found" instead of taking the whole app down.
+ */
+function createBonjours(
+  optsList: Array<Record<string, unknown>>,
+  log: (msg: string) => void
+): Array<Bonjour> {
+  const created: Array<Bonjour> = [];
+  optsList.forEach(opts => {
+    try {
+      created.push(
+        new Bonjour({ ...opts, reuseAddr: true }, (err: Error) =>
+          log(`mDNS socket error (ignored): ${err.message}`)
+        )
+      );
+    } catch (e) {
+      log(
+        `mDNS bind failed for ${JSON.stringify(opts)} (LAN discovery disabled on it): ${
+          e instanceof Error ? e.message : String(e)
+        }`
+      );
+    }
+  });
+  return created;
+}
 const UNREACHABLE_TTL_MS = 30_000;
 const MAX_FRAME_BYTES = 256 * 1024;
 
@@ -126,10 +158,7 @@ class ApocentroLan extends EventEmitter {
     const optsList: Array<Record<string, unknown>> = this.currentIps.length
       ? this.currentIps.map(ip => ({ interface: ip }))
       : [{}];
-    this.bonjours = optsList.map(
-      opts =>
-        new Bonjour(opts, (err: Error) => this.log(`mDNS socket error (ignored): ${err.message}`))
-    );
+    this.bonjours = createBonjours(optsList, msg => this.log(msg));
     this.log(
       `created ${this.bonjours.length} mDNS instance(s) on: ${this.currentIps.join(', ') || 'default'}`
     );
@@ -300,10 +329,7 @@ class ApocentroLan extends EventEmitter {
     const optsList: Array<Record<string, unknown>> = ips.length
       ? ips.map(ip => ({ interface: ip }))
       : [{}];
-    this.bonjours = optsList.map(
-      opts =>
-        new Bonjour(opts, (err: Error) => this.log(`mDNS socket error (ignored): ${err.message}`))
-    );
+    this.bonjours = createBonjours(optsList, msg => this.log(msg));
     this.advertise();
     this.startBrowsing();
   }
