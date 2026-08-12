@@ -55,6 +55,7 @@ window.apocentroLan = {
   onIncoming: cb => ipc.on('apocentro-lan:incoming', (_e, frame) => cb(frame)),
   onLog: cb => ipc.on('apocentro-lan:log', (_e, msg) => cb(msg)),
   onStatus: cb => ipc.on('apocentro-lan:status', (_e, status) => cb(status)),
+  onPortConflict: cb => ipc.on('apocentro-lan:port-conflict', (_e, conflict) => cb(conflict)),
 };
 // Windows-only: add / check a Windows Firewall exception for offline LAN calls.
 window.apocentroAddFirewallRule = () => ipc.invoke('apocentro-firewall:add');

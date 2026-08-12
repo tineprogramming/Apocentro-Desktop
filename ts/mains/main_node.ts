@@ -551,6 +551,9 @@ apocentroLan.on('log', (msg: string) => {
 apocentroLan.on('status', (status: { servicesSeen: number }) => {
   mainWindow?.webContents.send('apocentro-lan:status', status);
 });
+apocentroLan.on('port-conflict', (conflict: { port: number; apps: Array<string> }) => {
+  mainWindow?.webContents.send('apocentro-lan:port-conflict', conflict);
+});
 ipc.handle('apocentro-lan:start', async (_event, ourPubKey: string, contactPubKeys: Array<string>) => {
   await apocentroLan.start(ourPubKey, contactPubKeys);
 });

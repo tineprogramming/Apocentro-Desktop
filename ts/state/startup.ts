@@ -2,6 +2,7 @@ import { fromPairs, map } from 'lodash';
 import { ConvoHub } from '../session/conversations';
 import { UserUtils } from '../session/utils';
 import { initApocentroLanCalling } from '../session/utils/calling/ApocentroLanCalling';
+import { startOnionPathHealthWatchdog } from '../session/onions/onionPathHealth';
 import { createStore } from './createStore';
 import { initialCallState } from './ducks/call';
 import { getEmptyConversationState, openConversationWithMessages } from './ducks/conversations';
@@ -165,6 +166,12 @@ export const doAppStartUp = async () => {
       hasGiphyIntegrationEnabled: Storage.getBoolOr(SettingsKey.hasGiphyIntegrationEnabled, false),
     })
   );
+
+  // Apocentro: watch the onion path health and auto-reconnect with fresh nodes
+  // when the path light stays yellow/red. Started unconditionally (not inside
+  // the swarm-fetch promise below) precisely because that fetch is what fails
+  // when the connection is stuck.
+  startOnionPathHealthWatchdog();
 
   // eslint-disable-next-line more/no-then
   void SnodePool.getFreshSwarmFor(UserUtils.getOurPubKeyStrFromCache()).then(async () => {

@@ -38,6 +38,10 @@ import { toggleGiphyIntegration } from '../actions/toggleGiphyIntegration';
 import { getFeatureFlag } from '../../../../state/ducks/types/releasedFeaturesReduxTypes';
 import { CallManager } from '../../../../session/utils';
 import { APOCENTRO_CALL_DEBUG_KEY } from '../../../../session/utils/calling/ApocentroCallConfig';
+import {
+  isLanCallingEnabled,
+  setLanCallingEnabled,
+} from '../../../../session/utils/calling/ApocentroLanCalling';
 import { pushToastSuccess, pushToastError } from '../../../../session/utils/Toast';
 
 // Apocentro: gates 1:1 voice/video calling (incl. LAN/offline calls). Enabling it
@@ -195,6 +199,16 @@ export function PrivacySettingsPage(modalState: UserSettingsModalState) {
           }}
           text={{ token: 'callsVoiceAndVideoBeta' }}
           subText={{ token: 'callsVoiceAndVideoToggleDescription' }}
+        />
+        <SettingsToggleBasic
+          baseDataTestId="enable-lan-calling"
+          active={isLanCallingEnabled()}
+          onClick={async () => {
+            await setLanCallingEnabled(!isLanCallingEnabled());
+            forceUpdate();
+          }}
+          text={{ token: 'lanNearbyDev' }}
+          subText={{ token: 'lanNearbyDescriptionDev' }}
         />
         <SettingsToggleBasic
           baseDataTestId="enable-call-debug-info"

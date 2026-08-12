@@ -108,6 +108,8 @@ declare global {
       ) => void;
       onLog: (cb: (msg: string) => void) => void;
       onStatus: (cb: (status: { servicesSeen: number }) => void) => void;
+      /** Fired when LAN discovery can't bind mDNS port 5353 (another app owns it). */
+      onPortConflict: (cb: (conflict: { port: number; apps: Array<string> }) => void) => void;
     };
     // Apocentro (Windows): add a Windows Firewall exception so offline LAN calls
     // work without turning the firewall off. Resolves ok:false on other OSes or
