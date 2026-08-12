@@ -340,7 +340,11 @@ class ApocentroLan extends EventEmitter {
 
     const instances: Array<Bonjour> = [];
     for (const key of usable) {
-      const opts: Record<string, unknown> = key === 'default' ? {} : { interface: key };
+      // reuseAddr → share UDP 5353 with macOS's always-running mDNSResponder
+      // (multicast-dns defaults it to true; keep it explicit so a future
+      // dependency bump can't silently regress the macOS coexistence)
+      const opts: Record<string, unknown> =
+        key === 'default' ? { reuseAddr: true } : { interface: key, reuseAddr: true };
       try {
         const bonjour = new Bonjour(opts, (err: Error) =>
           this.log(`mDNS socket error (ignored): ${err.message}`)

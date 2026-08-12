@@ -60,12 +60,39 @@ function _getError(reason: unknown): Error {
   return new Error(`Promise rejected with a non-error: ${errorString}`);
 }
 
+/**
+ * Apocentro: is this a non-fatal mDNS/LAN-discovery socket error?
+ *
+ * macOS keeps its own `mDNSResponder` bound to UDP 5353, so our LAN-discovery bind can throw
+ * `EADDRINUSE` there; Wi-Fi changes can likewise throw `EADDRNOTAVAIL` when an interface IP
+ * disappears. These surface asynchronously from the dgram socket (outside the Bonjour error
+ * callback), so without this they reach the generic handler and kill the app with an "Unhandled
+ * Error" dialog at startup. LAN discovery is optional — everything else (messaging, calls over the
+ * internet) works fine without it, so log and keep running.
+ */
+function isNonFatalMdnsError(reason: unknown): boolean {
+  if (!isObject(reason)) {
+    return false;
+  }
+  const code = 'code' in reason ? String((reason as { code?: unknown }).code) : '';
+  const message = 'message' in reason ? String((reason as { message?: unknown }).message) : '';
+  const isBindFailure =
+    code === 'EADDRINUSE' || code === 'EADDRNOTAVAIL' || /EADDRINUSE|EADDRNOTAVAIL/.test(message);
+  // Only the mDNS port (5353) — a bind failure on any other port is a real problem we must not hide.
+  return isBindFailure && /:5353\b/.test(message);
+}
+
 export const addHandler = (): void => {
   // Note: we could maybe add a handler for when the renderer process died here?
   // (but also ignore the valid death like on restart/quit)
   process.on('uncaughtException', (reason: unknown) => {
     try {
       if (isObject(reason) && 'message' in reason && reason.message === 'write EPIPE') {
+        return;
+      }
+
+      if (isNonFatalMdnsError(reason)) {
+        console.error('[ApocentroLan] ignoring non-fatal mDNS socket error:', reason);
         return;
       }
 
@@ -79,6 +106,11 @@ export const addHandler = (): void => {
 
   process.on('unhandledRejection', (reason: unknown) => {
     try {
+      if (isNonFatalMdnsError(reason)) {
+        console.error('[ApocentroLan] ignoring non-fatal mDNS socket rejection:', reason);
+        return;
+      }
+
       logCrash('main', { reason: 'unhandledRejection', error: reason });
 
       handleError('Unhandled Promise Rejection', _getError(reason));
