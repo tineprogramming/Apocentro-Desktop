@@ -59,6 +59,17 @@ export const devSimpleNoArgs = {
   callsFirewallFailedDev: 'Could not add the firewall exception.',
   callsFirewallEnabledDescriptionDev:
     'Apocentro is already allowed through Windows Firewall, so offline LAN calls can connect.',
+
+  // Apocentro Nearby / LAN discovery
+  lanNearbyDev: 'Nearby (LAN discovery)',
+  lanNearbyDescriptionDev:
+    'Find your contacts on the same network for direct LAN calls and offline messages (uses mDNS port 5353). Turn off if it conflicts with another app on your computer.',
+  lanPortConflictAppsPrefixDev:
+    'Nearby/LAN discovery is unavailable — mDNS port 5353 is being used by:',
+  lanPortConflictGenericDev:
+    'Nearby/LAN discovery is unavailable — another app is using mDNS port 5353.',
+  lanPortConflictAdviceDev:
+    'Close that app to get Nearby back, or tap here to turn Nearby off in Privacy settings.',
 } as const;
 
 export type TokenDevNoArgs = keyof typeof devSimpleNoArgs;

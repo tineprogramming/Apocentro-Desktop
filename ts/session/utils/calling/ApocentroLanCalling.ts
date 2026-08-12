@@ -22,10 +22,16 @@ import { UserUtils } from '..';
 import { ContactsWrapperActions } from '../../../webworker/workers/browser/libsession_worker_interface';
 import { handleApocentroLanCallBytes } from '../../apis/snode_api/swarmPolling';
 import { fromBase64ToArray } from '../String';
+import { tr } from '../../../localization/localeTools';
+import { pushToastWarning } from '../Toast';
+import { userSettingsModal } from '../../../state/ducks/modalDialog';
 
 const SETTING_KEY = 'apocentro-lan-calling';
 
 let started = false;
+// IPC listeners survive a stop/start cycle, so register them exactly once.
+let listenersRegistered = false;
+let refreshLoopStarted = false;
 const reachablePeers = new Set<string>();
 
 // Total _apocentro._tcp mDNS services seen (contact or not) — surfaced in the
@@ -62,12 +68,11 @@ async function getContactPubKeys(): Promise<Array<string>> {
   }
 }
 
-/** Start LAN discovery + listening. Safe to call more than once. */
-export async function initApocentroLanCalling(): Promise<void> {
-  if (started || !window.apocentroLan || !isLanCallingEnabled()) {
+function registerLanListeners(): void {
+  if (listenersRegistered || !window.apocentroLan) {
     return;
   }
-  started = true;
+  listenersRegistered = true;
 
   window.apocentroLan.onLog(msg => {
     window?.log?.info(`[ApocentroLan/main] ${msg}`);
@@ -77,6 +82,20 @@ export async function initApocentroLanCalling(): Promise<void> {
     if (typeof status?.servicesSeen === 'number') {
       lanServicesSeen = status.servicesSeen;
     }
+  });
+
+  // Another app owns mDNS port 5353 → Nearby/LAN can't run. Tell the user which
+  // app it is (best-effort) and let them choose: close that app, or turn Nearby
+  // off in Privacy settings (clicking the toast opens them).
+  window.apocentroLan.onPortConflict(conflict => {
+    const apps = conflict?.apps?.filter(Boolean) ?? [];
+    const message = apps.length
+      ? `${tr('lanPortConflictAppsPrefixDev')} ${apps.join(', ')}. ${tr('lanPortConflictAdviceDev')}`
+      : `${tr('lanPortConflictGenericDev')} ${tr('lanPortConflictAdviceDev')}`;
+    window?.log?.warn(`[ApocentroLan] ${message}`);
+    pushToastWarning('apocentro-lan-port-conflict', message, () => {
+      window.inboxStore?.dispatch(userSettingsModal({ userSettingsPage: 'privacy' }));
+    });
   });
 
   window.apocentroLan.onPeer(peer => {
@@ -104,6 +123,16 @@ export async function initApocentroLanCalling(): Promise<void> {
       );
     }
   });
+}
+
+/** Start LAN discovery + listening. Safe to call more than once. */
+export async function initApocentroLanCalling(): Promise<void> {
+  if (started || !window.apocentroLan || !isLanCallingEnabled()) {
+    return;
+  }
+  started = true;
+
+  registerLanListeners();
 
   const ourPubKey = UserUtils.getOurPubKeyStrFromCache();
   const contacts = await getContactPubKeys();
@@ -115,18 +144,41 @@ export async function initApocentroLanCalling(): Promise<void> {
   // Keep the contacts-only discovery index fresh. Contacts are often not loaded
   // yet in the first seconds after startup (so the index would be empty and the
   // peer unmatchable), so refresh aggressively for the first minute, then settle.
-  let refreshCount = 0;
-  const scheduleRefresh = () => {
-    setTimeout(
-      () => {
-        void refreshApocentroLanContacts();
-        refreshCount += 1;
-        scheduleRefresh();
-      },
-      refreshCount < 12 ? 5_000 : 30_000
-    );
-  };
-  scheduleRefresh();
+  // The loop is registered once and no-ops while LAN calling is stopped.
+  if (!refreshLoopStarted) {
+    refreshLoopStarted = true;
+    let refreshCount = 0;
+    const scheduleRefresh = () => {
+      setTimeout(
+        () => {
+          void refreshApocentroLanContacts();
+          refreshCount += 1;
+          scheduleRefresh();
+        },
+        refreshCount < 12 ? 5_000 : 30_000
+      );
+    };
+    scheduleRefresh();
+  }
+}
+
+/**
+ * User-facing Nearby (LAN discovery) switch — persisted under the existing
+ * 'apocentro-lan-calling' setting. Turning it off stops mDNS advertising and
+ * the LAN listener immediately; turning it on restarts discovery.
+ */
+export async function setLanCallingEnabled(enabled: boolean): Promise<void> {
+  await window.setSettingValue(SETTING_KEY, enabled);
+  if (!enabled) {
+    window.apocentroLan?.stop();
+    started = false;
+    reachablePeers.clear();
+    lanServicesSeen = 0;
+    window?.log?.info('[ApocentroLan] Nearby/LAN disabled by user');
+  } else {
+    window?.log?.info('[ApocentroLan] Nearby/LAN enabled by user');
+    await initApocentroLanCalling();
+  }
 }
 
 /** Refresh the contacts-only discovery index (e.g. after a contact change). */

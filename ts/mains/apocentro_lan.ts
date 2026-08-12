@@ -17,6 +17,7 @@
  */
 
 import { EventEmitter } from 'events';
+import { exec } from 'child_process';
 import { createHash } from 'crypto';
 import { createServer, connect, Server, Socket } from 'net';
 import { networkInterfaces } from 'os';
@@ -36,6 +37,7 @@ const MDNS_FAILED_RETRY_MS = 5 * 60_000;
 type PeerAddr = { host: string; port: number };
 export type DiscoveredPeer = { pubkey: string; host: string; port: number };
 export type IncomingLanFrame = { payloadBase64: string; host: string; senderPort: number };
+export type LanPortConflict = { port: number; apps: Array<string> };
 
 function currentEpoch(): number {
   return Math.floor(Date.now() / EPOCH_MS);
@@ -105,6 +107,10 @@ class ApocentroLan extends EventEmitter {
   private failedInterfaces = new Map<string, number>();
   private mdnsRebuildPending = false;
 
+  // Only surface the "another app owns port 5353" notice once per start(), so a
+  // rebuild storm doesn't spam the renderer with toasts.
+  private portConflictNotified = false;
+
   private log(message: string): void {
     // eslint-disable-next-line no-console
     console.log(`[ApocentroLan] ${message}`);
@@ -127,6 +133,7 @@ class ApocentroLan extends EventEmitter {
     );
 
     this.currentIps = ourIpv4s();
+    this.portConflictNotified = false;
     this.bonjours = this.createBonjourInstances(this.currentIps);
     this.advertise();
     this.startBrowsing();
@@ -196,6 +203,7 @@ class ApocentroLan extends EventEmitter {
     this.contactTokenIndex.clear();
     this.failedInterfaces.clear();
     this.mdnsRebuildPending = false;
+    this.portConflictNotified = false;
   }
 
   public updateContacts(contactPubKeys: Array<string>): void {
@@ -345,6 +353,7 @@ class ApocentroLan extends EventEmitter {
             `mDNS failed on ${key} (${err.message}) — LAN discovery disabled on this interface for now; likely another app owns UDP port 5353`
           );
           this.failedInterfaces.set(key, Date.now());
+          this.maybeReportPortConflict(err);
           this.scheduleMdnsRebuild();
         });
         mdns?.on('warning', (err: Error) =>
@@ -377,6 +386,61 @@ class ApocentroLan extends EventEmitter {
         this.log(`mDNS rebuild failed (ignored): ${(e as Error).message}`);
       }
     }, 200);
+  }
+
+  /**
+   * On a 5353 bind conflict, try to find out WHICH app is holding the port and
+   * tell the renderer, so the UI can suggest closing that app (or turning
+   * Nearby off). Best-effort: emits with an empty list when detection fails.
+   */
+  private maybeReportPortConflict(err: Error): void {
+    const isAddrInUse =
+      (err as NodeJS.ErrnoException).code === 'EADDRINUSE' || err.message.includes('EADDRINUSE');
+    if (!isAddrInUse || this.portConflictNotified) {
+      return;
+    }
+    this.portConflictNotified = true;
+    void this.findMdnsPortOwners().then(apps => {
+      this.log(
+        `UDP 5353 is held by: ${apps.length ? apps.join(', ') : '(unknown — run: sudo lsof -nP -iUDP:5353)'}`
+      );
+      const conflict: LanPortConflict = { port: 5353, apps };
+      this.emit('port-conflict', conflict);
+    });
+  }
+
+  /**
+   * List process names (other than our own process and the OS's mDNSResponder,
+   * which coexists fine) that have UDP 5353 open. macOS/Linux only — uses
+   * unprivileged lsof, which can see the user's own apps; those are exactly the
+   * ones that grab 5353 exclusively and break our bind.
+   */
+  private async findMdnsPortOwners(): Promise<Array<string>> {
+    if (process.platform !== 'darwin' && process.platform !== 'linux') {
+      return [];
+    }
+    return new Promise(resolve => {
+      // -F pc → machine-readable "p<pid>" / "c<command>" line pairs
+      exec('lsof -nP -iUDP:5353 -F pc', { timeout: 3_000 }, (_error, stdout) => {
+        try {
+          const apps = new Set<string>();
+          let pid = '';
+          for (const line of String(stdout || '').split('\n')) {
+            if (line.startsWith('p')) {
+              pid = line.slice(1).trim();
+            } else if (line.startsWith('c')) {
+              const name = line.slice(1).trim();
+              if (name && pid !== String(process.pid) && name !== 'mDNSResponder') {
+                apps.add(name);
+              }
+            }
+          }
+          resolve(Array.from(apps));
+        } catch {
+          resolve([]);
+        }
+      });
+    });
   }
 
   private rebuildMdns(reason: string): void {
