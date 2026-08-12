@@ -176,6 +176,27 @@ export async function dropSnodeFromPath(snodeEd25519: string, reason: string) {
   );
 }
 
+/**
+ * Apocentro: drop all current onion paths (and optionally the guard nodes) so
+ * the next build starts over with fresh nodes. Used by the connection health
+ * watchdog and the manual Retry on the onion path dialog — never called on the
+ * normal request path.
+ */
+export async function dropAllPathsForReconnect(alsoDropGuards: boolean) {
+  window?.log?.warn(
+    `${logPrefix} dropping all onion paths for reconnect (alsoDropGuards=${alsoDropGuards})`
+  );
+  onionPaths = [];
+  pathFailureCount = {};
+  if (alsoDropGuards) {
+    guardNodes = [];
+    await internalUpdateGuardNodes(guardNodes);
+  }
+  if (!isEmpty(window.inboxStore?.getState().onionPaths.snodePaths)) {
+    window.inboxStore?.dispatch(updateOnionPaths([]));
+  }
+}
+
 export async function getOnionPath({ toExclude }: { toExclude?: Snode }): Promise<Array<Snode>> {
   let attemptNumber = 0;
 

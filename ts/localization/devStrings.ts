@@ -70,6 +70,10 @@ export const devSimpleNoArgs = {
     'Nearby/LAN discovery is unavailable — another app is using mDNS port 5353.',
   lanPortConflictAdviceDev:
     'Close that app to get Nearby back, or tap here to turn Nearby off in Privacy settings.',
+
+  // Apocentro connection diagnostics (onion path dialog)
+  connectionDetailsShowDev: 'Show connection details',
+  connectionDetailsHideDev: 'Hide connection details',
 } as const;
 
 export type TokenDevNoArgs = keyof typeof devSimpleNoArgs;

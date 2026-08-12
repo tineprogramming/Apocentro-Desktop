@@ -35,6 +35,11 @@ import { ModalFlexContainer } from './shared/ModalFlexContainer';
 import { getDataFeatureFlagMemo } from '../../state/ducks/types/releasedFeaturesReduxTypes';
 import { DURATION } from '../../session/constants';
 import { createButtonOnKeyDownForClickEventHandler } from '../../util/keyboardShortcuts';
+import {
+  buildOnionDebugReport,
+  forceOnionReconnect,
+} from '../../session/onions/onionPathHealth';
+import { pushToastSuccess } from '../../session/utils/Toast';
 
 type StatusLightType = {
   glowing?: boolean;
@@ -157,10 +162,84 @@ const OnionPathModalInner = () => {
   });
 
   if (!isOnline || !nodes || nodes.length <= 0 || !reader) {
-    return <SessionSpinner $loading={true} />;
+    return (
+      <>
+        <SessionSpinner $loading={true} />
+        <ConnectionDetails />
+      </>
+    );
   }
 
-  return <OnionPathModalLoaded />;
+  return (
+    <>
+      <OnionPathModalLoaded />
+      <ConnectionDetails />
+    </>
+  );
+};
+
+const StyledDebugReport = styled.pre`
+  font-family: monospace;
+  font-size: 11px;
+  line-height: 1.4;
+  max-height: 200px;
+  max-width: 100%;
+  overflow: auto;
+  user-select: text;
+  white-space: pre-wrap;
+  text-align: left;
+  background: var(--background-secondary-color);
+  color: var(--text-primary-color);
+  padding: var(--margins-sm);
+  border-radius: 8px;
+  margin: var(--margins-sm);
+`;
+
+/**
+ * Apocentro: connection diagnostics the user can copy and send to us when the
+ * path light is stuck — mirrors the Android Path screen debug panel.
+ */
+const ConnectionDetails = () => {
+  const [show, setShow] = useState(false);
+  const [report, setReport] = useState('');
+
+  const refresh = () => {
+    void buildOnionDebugReport().then(setReport);
+  };
+
+  useInterval(() => {
+    if (show) {
+      refresh();
+    }
+  }, 1 * DURATION.SECONDS);
+
+  return (
+    <Flex $container={true} $flexDirection="column" $alignItems="center">
+      <SessionButton
+        text={tr(show ? 'connectionDetailsHideDev' : 'connectionDetailsShowDev')}
+        buttonType={SessionButtonType.Simple}
+        onClick={() => {
+          if (!show) {
+            refresh();
+          }
+          setShow(!show);
+        }}
+      />
+      {show ? (
+        <>
+          <StyledDebugReport>{report}</StyledDebugReport>
+          <SessionButton
+            text={tr('copy')}
+            buttonType={SessionButtonType.Simple}
+            onClick={() => {
+              window.clipboard.writeText(report);
+              pushToastSuccess('copied-connection-details', tr('copied'));
+            }}
+          />
+        </>
+      ) : null}
+    </Flex>
+  );
 };
 
 const OnionPathModalLoaded = () => {
@@ -274,6 +353,7 @@ function OnionPathDot({
 
 export const OnionPathModal = () => {
   const dispatch = getAppDispatch();
+  const [reconnecting, setReconnecting] = useState(false);
   return (
     <SessionWrapperModal
       modalId="onionPathModal"
@@ -281,6 +361,21 @@ export const OnionPathModal = () => {
       headerChildren={<ModalBasicHeader title={tr('onionRoutingPath')} showExitIcon={true} />}
       buttonChildren={
         <ModalActionsContainer buttonType={SessionButtonType.Simple}>
+          <SessionButton
+            text={tr('retry')}
+            buttonType={SessionButtonType.Simple}
+            disabled={reconnecting}
+            onClick={async () => {
+              // Apocentro: manual node change — same escalating reconnect the
+              // health watchdog runs (fresh guards/pool on repeated attempts).
+              setReconnecting(true);
+              try {
+                await forceOnionReconnect('manual');
+              } finally {
+                setReconnecting(false);
+              }
+            }}
+          />
           <SessionButton
             text={tr('learnMore')}
             buttonType={SessionButtonType.Simple}
