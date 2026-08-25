@@ -64,19 +64,30 @@ jobs:
           # (e.g. v1.18.1) has never had a release of its own — back it into
           # the Releases tab (notes only, no installers) so history doesn't
           # start empty at whatever version we bump to next.
+          #
+          # This also covers a rarer case: a previous run bumped to $CURRENT
+          # and pushed, then got cancelled (by a fast-following push sharing
+          # this workflow's concurrency group) before the release job could
+          # publish it — so $CURRENT never got its real, installers-attached
+          # release. Target the actual "bump to $CURRENT" commit (not
+          # $GITHUB_SHA, which by now may be several commits ahead) so this
+          # backfill's changelog boundary is correct and the next version's
+          # changelog isn't shifted by commits this one already covers.
           OLD_TAG="v$CURRENT"
           if ! gh release view "$OLD_TAG" >/dev/null 2>&1; then
-            echo "Backfilling a release for the pre-automation version $OLD_TAG"
+            echo "Backfilling a release for $OLD_TAG (no release found for it yet)"
+            BACKFILL_TARGET=$(git log --fixed-strings --grep="chore: bump version to $CURRENT" --format=%H -1)
+            BACKFILL_TARGET="${BACKFILL_TARGET:-$GITHUB_SHA}"
             PREV_TAG=$(git tag --list 'v*' | sort -V | tail -1)
             if [ -n "$PREV_TAG" ]; then
-              CHANGELOG=$(git log "$PREV_TAG"..HEAD --pretty='- %s (%h)' --no-merges)
+              CHANGELOG=$(git log "$PREV_TAG".."$BACKFILL_TARGET" --pretty='- %s (%h)' --no-merges)
             else
-              CHANGELOG=$(git log --pretty='- %s (%h)' --no-merges -n 30)
+              CHANGELOG=$(git log "$BACKFILL_TARGET" --pretty='- %s (%h)' --no-merges -n 30)
             fi
             [ -z "$CHANGELOG" ] && CHANGELOG="- No recorded changes."
-            NOTES=$(printf 'Backfilled release marking the version shipped before automated versioning started (commit %s). No installers attached here — this is a historical marker only.\n\n## Changes\n%s' "$GITHUB_SHA" "$CHANGELOG")
+            NOTES=$(printf 'Backfilled release (commit %s) — either this predates automated versioning, or an earlier CI run for it was superseded before it could publish. No installers attached here — see the next version'"'"'s release for a current build.\n\n## Changes\n%s' "$BACKFILL_TARGET" "$CHANGELOG")
             gh release create "$OLD_TAG" \
-              --target "$GITHUB_SHA" \
+              --target "$BACKFILL_TARGET" \
               --title "Apocentro Desktop $OLD_TAG" \
               --notes "$NOTES" \
               --prerelease
