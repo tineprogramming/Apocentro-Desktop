@@ -8,15 +8,18 @@ name: Apocentro Build
 # - Windows: NSIS installer (.exe)
 # - macOS:   .dmg (unsigned, best-effort — may need certs; continue-on-error)
 #
-# Trigger it from the Actions tab ("Run workflow") or it runs on push to the
-# Apocentro working branch.
+# Trigger it from the Actions tab ("Run workflow") or it runs on push to
+# apocentro-desktop — every merged PR gets exactly one real build (the one
+# that also bumps the version and publishes a Release), instead of one on
+# the working branch and another on merge. Use "Run workflow"
+# (workflow_dispatch) to build a feature branch manually when you want
+# installers to test before merging.
 
 on:
   workflow_dispatch:
   push:
     branches:
       - apocentro-desktop
-      - claude/apocentro-voip-push-fallback
 
 concurrency:
   group: apocentro-build-${{ github.ref }}
