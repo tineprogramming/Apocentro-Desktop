@@ -22,8 +22,50 @@ concurrency:
   group: apocentro-build-${{ github.ref }}
   cancel-in-progress: true
 
+# Needed by the version-bump commit and the versioned Release, both below.
+permissions:
+  contents: write
+
 jobs:
+  # package.json's version has never been bumped since the fork (still
+  # 1.18.1), and installers are only ever uploaded as run artifacts, so
+  # there's no persistent version history anywhere. On push to
+  # apocentro-desktop (i.e. merged PRs) this bumps the patch version and
+  # pushes it back, so the platform jobs below build with — and the release
+  # job at the end tags/publishes — an ever-increasing version. Left alone
+  # on the other working branch.
+  version:
+    runs-on: ubuntu-22.04
+    if: github.ref == 'refs/heads/apocentro-desktop'
+    outputs:
+      version: ${{ steps.bump.outputs.version }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Bump package.json patch version
+        id: bump
+        run: |
+          set -euo pipefail
+          CURRENT=$(node -p "require('./package.json').version")
+          NEW=$(awk -F. '{ $NF += 1; print }' OFS=. <<< "$CURRENT")
+          node -e "
+            const fs = require('fs');
+            const p = require('./package.json');
+            p.version = '$NEW';
+            fs.writeFileSync('package.json', JSON.stringify(p, null, 2) + '\n');
+          "
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add package.json
+          git commit -m "chore: bump version to $NEW [skip ci]"
+          git push origin HEAD:apocentro-desktop
+          echo "version=$NEW" >> "$GITHUB_OUTPUT"
+
   linux:
+    needs: version
+    # Run whether `version` ran (apocentro-desktop) or was skipped (the
+    # other working branch) — only a real failure should block this.
+    if: ${{ !cancelled() }}
     runs-on: ubuntu-22.04
     timeout-minutes: 30
     strategy:
@@ -61,6 +103,8 @@ jobs:
           upload_prefix: linux-${{ matrix.electron_target }}
 
   windows:
+    needs: version
+    if: ${{ !cancelled() }}
     runs-on: windows-2022
     timeout-minutes: 40
     name: "windows x64"
@@ -93,6 +137,8 @@ jobs:
           upload_prefix: windows-x64
 
   mac:
+    needs: version
+    if: ${{ !cancelled() }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 40
     strategy:
@@ -138,3 +184,36 @@ jobs:
         uses: ./actions/upload_prod_artefacts
         with:
           upload_prefix: mac-${{ matrix.arch }}
+
+  # Only on apocentro-desktop: gather every installer built above and
+  # publish them as a permanent, never-deleted GitHub Release — this is
+  # what actually builds up a version history in the Releases tab, instead
+  # of installers only ever living as expiring run artifacts.
+  release:
+    needs: [linux, windows, mac, version]
+    if: github.ref == 'refs/heads/apocentro-desktop'
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Download all installers
+        uses: actions/download-artifact@v4
+        with:
+          path: dist-artifacts
+
+      - name: Publish versioned GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          VERSION="v${{ needs.version.outputs.version }}"
+          FILES=$(find dist-artifacts -type f \( -iname '*.dmg' -o -iname '*.exe' -o -iname '*.deb' -o -iname '*.AppImage' \))
+          if [ -z "$FILES" ]; then
+            echo "No installer files found among downloaded artifacts, nothing to release." >&2
+            exit 1
+          fi
+          echo "Publishing $VERSION with:"
+          echo "$FILES"
+          gh release create "$VERSION" $FILES \
+            --target apocentro-desktop \
+            --title "Apocentro Desktop $VERSION" \
+            --notes "Automated unsigned build of commit ${GITHUB_SHA}." \
+            --prerelease
