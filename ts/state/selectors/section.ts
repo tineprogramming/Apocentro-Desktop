@@ -1,7 +1,7 @@
 import { createSelector } from '@reduxjs/toolkit';
 
 import { useSelector } from 'react-redux';
-import { LeftOverlayMode, LeftOverlayType, SectionStateType } from '../ducks/section';
+import { ConversationFilterType, LeftOverlayMode, LeftOverlayType, SectionStateType } from '../ducks/section';
 import { StateType } from '../reducer';
 
 export const getSection = (state: StateType): SectionStateType => state.section;
@@ -43,11 +43,11 @@ export function useIsMessageRequestOverlayShown() {
   return useSelector(getIsMessageRequestOverlayShown);
 }
 
-export const getFilterUnreplied = createSelector(
+export const getConversationFilter = createSelector(
   getSection,
-  (state: SectionStateType): boolean => state.filterUnreplied
+  (state: SectionStateType): ConversationFilterType => state.conversationFilter
 );
 
-export function useFilterUnreplied() {
-  return useSelector(getFilterUnreplied);
+export function useConversationFilter() {
+  return useSelector(getConversationFilter);
 }

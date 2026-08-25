@@ -9,12 +9,9 @@ import { SearchResults } from '../search/SearchResults';
 import { LeftPaneSectionHeader } from './LeftPaneSectionHeader';
 import { MessageRequestsBanner } from './MessageRequestsBanner';
 
-import {
-  getFilteredLeftPaneConversationIds,
-  getLeftPaneConversationIds,
-} from '../../state/selectors/conversations';
+import { getFilteredLeftPaneConversationIds } from '../../state/selectors/conversations';
 import { useSearchTermForType } from '../../state/selectors/search';
-import { useFilterUnreplied, useLeftOverlayModeType } from '../../state/selectors/section';
+import { useConversationFilter, useLeftOverlayModeType } from '../../state/selectors/section';
 import { assertUnreachable } from '../../types/sqlSharedTypes';
 import { SessionButton, SessionButtonType } from '../basic/SessionButton';
 import { Flex } from '../basic/Flex';
@@ -28,7 +25,7 @@ import { OverlayInvite } from './overlay/OverlayInvite';
 import { OverlayMessage } from './overlay/OverlayMessage';
 import { OverlayMessageRequest } from './overlay/OverlayMessageRequest';
 import { OverlayChooseAction } from './overlay/choose-action/OverlayChooseAction';
-import { sectionActions } from '../../state/ducks/section';
+import { sectionActions, type ConversationFilterType } from '../../state/ducks/section';
 import {
   openConversationWithMessages,
   resetConversationExternal,
@@ -77,6 +74,43 @@ const ClosableOverlay = () => {
         `ClosableOverlay: leftOverlayMode case not handled "${leftOverlayMode}"`
       );
   }
+};
+
+const ALL_CONVERSATION_FILTERS: Array<ConversationFilterType> = ['all', 'unread', 'unreplied'];
+
+function filterLabel(filter: ConversationFilterType): string {
+  switch (filter) {
+    case 'all':
+      return tr('filterAllDev');
+    case 'unread':
+      return tr('filterUnreadDev');
+    case 'unreplied':
+      return tr('filterUnrepliedDev');
+    default:
+      return assertUnreachable(filter, `filterLabel: unhandled filter "${filter}"`);
+  }
+}
+
+/**
+ * Apocentro: All/Unread/Unreplied filter chips (mirrors WhatsApp/Telegram's
+ * left-pane filter row) instead of a single toggle.
+ */
+const ConversationFilterRow = () => {
+  const dispatch = getAppDispatch();
+  const selected = useConversationFilter();
+
+  return (
+    <Flex $container={true} $flexGap="var(--margins-xs)" $padding="var(--margins-xs) var(--margins-sm)">
+      {ALL_CONVERSATION_FILTERS.map(filter => (
+        <SessionButton
+          key={filter}
+          text={filterLabel(filter)}
+          buttonType={filter === selected ? SessionButtonType.Solid : SessionButtonType.Outline}
+          onClick={() => dispatch(sectionActions.setConversationFilter(filter))}
+        />
+      ))}
+    </Flex>
+  );
 };
 
 const ConversationRow = (
@@ -166,18 +200,17 @@ function useConversationListKeyboardShortcuts(conversationIds: Array<string>) {
 
 function useConversationList() {
   const searchTerm = useSearchTermForType('global');
-  const filterUnreplied = useFilterUnreplied();
-  const allConversationIds = useSelector(getLeftPaneConversationIds);
-  const unrepliedConversationIds = useSelector(getFilteredLeftPaneConversationIds);
+  const conversationFilter = useConversationFilter();
+  const conversationIds = useSelector(getFilteredLeftPaneConversationIds);
   return {
     searchTerm,
-    conversationIds: filterUnreplied ? unrepliedConversationIds : allConversationIds,
-    filterUnreplied,
+    conversationIds,
+    conversationFilter,
   };
 }
 
 function ConversationList() {
-  const { searchTerm, conversationIds, filterUnreplied } = useConversationList();
+  const { searchTerm, conversationIds, conversationFilter } = useConversationList();
   useConversationListKeyboardShortcuts(conversationIds);
 
   if (!isEmpty(searchTerm)) {
@@ -190,7 +223,7 @@ function ConversationList() {
     );
   }
 
-  if (filterUnreplied && conversationIds.length === 0) {
+  if (conversationFilter !== 'all' && conversationIds.length === 0) {
     return (
       <Flex
         $container={true}
@@ -198,7 +231,7 @@ function ConversationList() {
         $alignItems="center"
         $padding="var(--margins-lg)"
       >
-        {tr('filterUnrepliedEmptyDev')}
+        {tr(conversationFilter === 'unread' ? 'filterUnreadEmptyDev' : 'filterUnrepliedEmptyDev')}
       </Flex>
     );
   }
@@ -246,7 +279,6 @@ function ConversationList() {
 
 export function LeftPaneMessageSection() {
   const leftOverlayMode = useLeftOverlayModeType();
-  const filterUnreplied = useFilterUnreplied();
   const dispatch = getAppDispatch();
 
   return (
@@ -257,13 +289,7 @@ export function LeftPaneMessageSection() {
       ) : (
         <StyledConversationListContent>
           <SessionSearchInput searchType="global" />
-          <Flex $container={true} $justifyContent="flex-end" $padding="0 var(--margins-sm)">
-            <SessionButton
-              text={tr('filterUnrepliedDev')}
-              buttonType={filterUnreplied ? SessionButtonType.Solid : SessionButtonType.Outline}
-              onClick={() => dispatch(sectionActions.toggleFilterUnreplied())}
-            />
-          </Flex>
+          <ConversationFilterRow />
           <MessageRequestsBanner
             handleOnClick={() => {
               dispatch(

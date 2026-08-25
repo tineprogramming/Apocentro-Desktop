@@ -33,6 +33,8 @@ import { isUsAnySogsFromCache } from '../../session/apis/open_group_api/sogsv3/k
 import { PubKey } from '../../session/types';
 import { UserGroupsWrapperActions } from '../../webworker/workers/browser/libsession_worker_interface';
 import { getSelectedConversationKey } from './selectedConversation';
+import { getConversationFilter } from './section';
+import type { ConversationFilterType } from '../ducks/section';
 import { useModerators } from './sogsRoomInfo';
 import type { SessionSuggestionDataItem } from '../../components/conversation/composition/types';
 import { useIsPublic, useWeAreAdmin } from '../../hooks/useParamSelector';
@@ -386,6 +388,13 @@ export const getLeftPaneConversationIdsCount = createSelector(
   }
 );
 
+const _isUnread = (conversation: ReduxConversationType | undefined): boolean => {
+  if (!conversation) {
+    return false;
+  }
+  return isNumber(conversation.unreadCount) && conversation.unreadCount > 0;
+};
+
 /**
  * A conversation's last message only carries a `status` when it was sent by
  * us (see Message.getMessagePropStatus, which bails out for incoming
@@ -393,25 +402,33 @@ export const getLeftPaneConversationIdsCount = createSelector(
  * last message that has text but no status.
  */
 const _isWaitingOnOurReply = (conversation: ReduxConversationType | undefined): boolean => {
-  if (!conversation) {
+  if (!_isUnread(conversation)) {
     return false;
   }
-  const hasUnread = isNumber(conversation.unreadCount) && conversation.unreadCount > 0;
-  const lastMessageIsIncoming = Boolean(
-    conversation.lastMessage?.text && conversation.lastMessage.status === undefined
+  return Boolean(
+    conversation!.lastMessage?.text && conversation!.lastMessage.status === undefined
   );
-  return hasUnread && lastMessageIsIncoming;
 };
 
 /**
- * Left pane conversation ids narrowed down to conversations with unread
- * messages we haven't replied to yet (Apocentro "unreplied" filter).
+ * Left pane conversation ids narrowed by the Apocentro All/Unread/Unreplied
+ * filter (getConversationFilter) — 'unreplied' meaning unread and we haven't
+ * sent the last message yet.
  */
 export const getFilteredLeftPaneConversationIds = createSelector(
   getLeftPaneConversationIds,
   getConversationLookup,
-  (convoIds: Array<string>, lookup: ConversationLookupType) => {
-    return convoIds.filter(id => _isWaitingOnOurReply(lookup[id]));
+  getConversationFilter,
+  (
+    convoIds: Array<string>,
+    lookup: ConversationLookupType,
+    filterType: ConversationFilterType
+  ) => {
+    if (filterType === 'all') {
+      return convoIds;
+    }
+    const predicate = filterType === 'unread' ? _isUnread : _isWaitingOnOurReply;
+    return convoIds.filter(id => predicate(lookup[id]));
   }
 );
 
