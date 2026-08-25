@@ -40,12 +40,16 @@ export const initialSectionState: SectionStateType = {
   isAppFocused: false,
   leftOverlayMode: undefined,
   rightOverlayMode: { type: 'default', params: null },
+  filterUnreplied: false,
 };
 
 export type SectionStateType = {
   isAppFocused: boolean;
   leftOverlayMode: LeftOverlayMode | undefined;
   rightOverlayMode: RightOverlayMode | undefined;
+  // Apocentro: when true, the left pane conversation list is narrowed to
+  // conversations with unread messages we haven't replied to yet.
+  filterUnreplied: boolean;
 };
 
 const sectionSlice = createSlice({
@@ -80,6 +84,12 @@ const sectionSlice = createSlice({
       return {
         ...state,
         isAppFocused: action.payload,
+      };
+    },
+    toggleFilterUnreplied(state) {
+      return {
+        ...state,
+        filterUnreplied: !state.filterUnreplied,
       };
     },
   },

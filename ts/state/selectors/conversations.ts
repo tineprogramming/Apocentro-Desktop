@@ -387,6 +387,35 @@ export const getLeftPaneConversationIdsCount = createSelector(
 );
 
 /**
+ * A conversation's last message only carries a `status` when it was sent by
+ * us (see Message.getMessagePropStatus, which bails out for incoming
+ * messages). So "unread, and the last message is incoming" is: unread with a
+ * last message that has text but no status.
+ */
+const _isWaitingOnOurReply = (conversation: ReduxConversationType | undefined): boolean => {
+  if (!conversation) {
+    return false;
+  }
+  const hasUnread = isNumber(conversation.unreadCount) && conversation.unreadCount > 0;
+  const lastMessageIsIncoming = Boolean(
+    conversation.lastMessage?.text && conversation.lastMessage.status === undefined
+  );
+  return hasUnread && lastMessageIsIncoming;
+};
+
+/**
+ * Left pane conversation ids narrowed down to conversations with unread
+ * messages we haven't replied to yet (Apocentro "unreplied" filter).
+ */
+export const getFilteredLeftPaneConversationIds = createSelector(
+  getLeftPaneConversationIds,
+  getConversationLookup,
+  (convoIds: Array<string>, lookup: ConversationLookupType) => {
+    return convoIds.filter(id => _isWaitingOnOurReply(lookup[id]));
+  }
+);
+
+/**
  * Returns all the conversation ids of contacts which are
  * - private
  * - not me

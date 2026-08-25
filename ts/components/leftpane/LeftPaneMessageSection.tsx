@@ -9,10 +9,16 @@ import { SearchResults } from '../search/SearchResults';
 import { LeftPaneSectionHeader } from './LeftPaneSectionHeader';
 import { MessageRequestsBanner } from './MessageRequestsBanner';
 
-import { getLeftPaneConversationIds } from '../../state/selectors/conversations';
+import {
+  getFilteredLeftPaneConversationIds,
+  getLeftPaneConversationIds,
+} from '../../state/selectors/conversations';
 import { useSearchTermForType } from '../../state/selectors/search';
-import { useLeftOverlayModeType } from '../../state/selectors/section';
+import { useFilterUnreplied, useLeftOverlayModeType } from '../../state/selectors/section';
 import { assertUnreachable } from '../../types/sqlSharedTypes';
+import { SessionButton, SessionButtonType } from '../basic/SessionButton';
+import { Flex } from '../basic/Flex';
+import { tr } from '../../localization/localeTools';
 import { SessionSearchInput } from '../SessionSearchInput';
 import { StyledLeftPaneList } from './LeftPaneList';
 import { ConversationListItem } from './conversation-list-item/ConversationListItem';
@@ -160,15 +166,18 @@ function useConversationListKeyboardShortcuts(conversationIds: Array<string>) {
 
 function useConversationList() {
   const searchTerm = useSearchTermForType('global');
-  const conversationIds = useSelector(getLeftPaneConversationIds);
+  const filterUnreplied = useFilterUnreplied();
+  const allConversationIds = useSelector(getLeftPaneConversationIds);
+  const unrepliedConversationIds = useSelector(getFilteredLeftPaneConversationIds);
   return {
     searchTerm,
-    conversationIds,
+    conversationIds: filterUnreplied ? unrepliedConversationIds : allConversationIds,
+    filterUnreplied,
   };
 }
 
 function ConversationList() {
-  const { searchTerm, conversationIds } = useConversationList();
+  const { searchTerm, conversationIds, filterUnreplied } = useConversationList();
   useConversationListKeyboardShortcuts(conversationIds);
 
   if (!isEmpty(searchTerm)) {
@@ -178,6 +187,19 @@ function ConversationList() {
   if (!conversationIds) {
     throw new Error(
       'ConversationList: must provided conversations if no search results are provided'
+    );
+  }
+
+  if (filterUnreplied && conversationIds.length === 0) {
+    return (
+      <Flex
+        $container={true}
+        $flexDirection="column"
+        $alignItems="center"
+        $padding="var(--margins-lg)"
+      >
+        {tr('filterUnrepliedEmptyDev')}
+      </Flex>
     );
   }
 
@@ -224,6 +246,7 @@ function ConversationList() {
 
 export function LeftPaneMessageSection() {
   const leftOverlayMode = useLeftOverlayModeType();
+  const filterUnreplied = useFilterUnreplied();
   const dispatch = getAppDispatch();
 
   return (
@@ -234,6 +257,13 @@ export function LeftPaneMessageSection() {
       ) : (
         <StyledConversationListContent>
           <SessionSearchInput searchType="global" />
+          <Flex $container={true} $justifyContent="flex-end" $padding="0 var(--margins-sm)">
+            <SessionButton
+              text={tr('filterUnrepliedDev')}
+              buttonType={filterUnreplied ? SessionButtonType.Solid : SessionButtonType.Outline}
+              onClick={() => dispatch(sectionActions.toggleFilterUnreplied())}
+            />
+          </Flex>
           <MessageRequestsBanner
             handleOnClick={() => {
               dispatch(

@@ -42,3 +42,12 @@ const getIsMessageRequestOverlayShown = (state: StateType) => {
 export function useIsMessageRequestOverlayShown() {
   return useSelector(getIsMessageRequestOverlayShown);
 }
+
+export const getFilterUnreplied = createSelector(
+  getSection,
+  (state: SectionStateType): boolean => state.filterUnreplied
+);
+
+export function useFilterUnreplied() {
+  return useSelector(getFilterUnreplied);
+}
