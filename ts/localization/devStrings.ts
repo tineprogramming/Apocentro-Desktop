@@ -74,6 +74,10 @@ export const devSimpleNoArgs = {
   // Apocentro connection diagnostics (onion path dialog)
   connectionDetailsShowDev: 'Show connection details',
   connectionDetailsHideDev: 'Hide connection details',
+
+  // Apocentro left pane "unreplied" filter
+  filterUnrepliedDev: 'Unreplied',
+  filterUnrepliedEmptyDev: 'Nothing waiting on a reply',
 } as const;
 
 export type TokenDevNoArgs = keyof typeof devSimpleNoArgs;
