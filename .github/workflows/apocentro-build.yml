@@ -39,14 +39,46 @@ jobs:
     if: github.ref == 'refs/heads/apocentro-desktop'
     outputs:
       version: ${{ steps.bump.outputs.version }}
+      sha: ${{ steps.bump.outputs.sha }}
     steps:
       - uses: actions/checkout@v4
+        with:
+          # Full history + tags: needed to diff against the previous release
+          # tag for changelogs, and to check whether a version already has
+          # a release.
+          fetch-depth: 0
+          fetch-tags: true
 
       - name: Bump package.json patch version
         id: bump
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
           CURRENT=$(node -p "require('./package.json').version")
+
+          # First run of this workflow: the version currently shipping
+          # (e.g. v1.18.1) has never had a release of its own — back it into
+          # the Releases tab (notes only, no installers) so history doesn't
+          # start empty at whatever version we bump to next.
+          OLD_TAG="v$CURRENT"
+          if ! gh release view "$OLD_TAG" >/dev/null 2>&1; then
+            echo "Backfilling a release for the pre-automation version $OLD_TAG"
+            PREV_TAG=$(git tag --list 'v*' | sort -V | tail -1)
+            if [ -n "$PREV_TAG" ]; then
+              CHANGELOG=$(git log "$PREV_TAG"..HEAD --pretty='- %s (%h)' --no-merges)
+            else
+              CHANGELOG=$(git log --pretty='- %s (%h)' --no-merges -n 30)
+            fi
+            [ -z "$CHANGELOG" ] && CHANGELOG="- No recorded changes."
+            NOTES=$(printf 'Backfilled release marking the version shipped before automated versioning started (commit %s). No installers attached here — this is a historical marker only.\n\n## Changes\n%s' "$GITHUB_SHA" "$CHANGELOG")
+            gh release create "$OLD_TAG" \
+              --target "$GITHUB_SHA" \
+              --title "Apocentro Desktop $OLD_TAG" \
+              --notes "$NOTES" \
+              --prerelease
+          fi
+
           NEW=$(awk -F. '{ $NF += 1; print }' OFS=. <<< "$CURRENT")
           node -e "
             const fs = require('fs');
@@ -60,6 +92,7 @@ jobs:
           git commit -m "chore: bump version to $NEW [skip ci]"
           git push origin HEAD:apocentro-desktop
           echo "version=$NEW" >> "$GITHUB_OUTPUT"
+          echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
 
   linux:
     needs: version
@@ -79,6 +112,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
+          # Without this, checkout defaults to the commit that triggered the
+          # run — which predates the version-bump commit `version` just
+          # pushed. Follow that commit when it ran, otherwise (the other
+          # working branch, where `version` is skipped) fall back to normal.
+          ref: ${{ needs.version.outputs.sha || github.sha }}
           submodules: recursive
 
       - name: Setup
@@ -118,6 +156,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
+          # Without this, checkout defaults to the commit that triggered the
+          # run — which predates the version-bump commit `version` just
+          # pushed. Follow that commit when it ran, otherwise (the other
+          # working branch, where `version` is skipped) fall back to normal.
+          ref: ${{ needs.version.outputs.sha || github.sha }}
           submodules: recursive
 
       - name: Setup
@@ -162,6 +205,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
+          # Without this, checkout defaults to the commit that triggered the
+          # run — which predates the version-bump commit `version` just
+          # pushed. Follow that commit when it ran, otherwise (the other
+          # working branch, where `version` is skipped) fall back to normal.
+          ref: ${{ needs.version.outputs.sha || github.sha }}
           submodules: recursive
 
       - name: Setup
@@ -194,6 +242,13 @@ jobs:
     if: github.ref == 'refs/heads/apocentro-desktop'
     runs-on: ubuntu-22.04
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.version.outputs.sha }}
+          fetch-depth: 0
+          fetch-tags: true
+
       - name: Download all installers
         uses: actions/download-artifact@v4
         with:
@@ -210,10 +265,23 @@ jobs:
             echo "No installer files found among downloaded artifacts, nothing to release." >&2
             exit 1
           fi
+
+          # Pick up the backfilled tag (created earlier in this same run by
+          # the version job) before diffing for the changelog.
+          git fetch origin --tags --force
+          PREV_TAG=$(git tag --list 'v*' | grep -v "^${VERSION}\$" | sort -V | tail -1)
+          if [ -n "$PREV_TAG" ]; then
+            CHANGELOG=$(git log "$PREV_TAG"..HEAD --pretty='- %s (%h)' --no-merges | grep -v '^- chore: bump version' || true)
+          else
+            CHANGELOG=$(git log --pretty='- %s (%h)' --no-merges -n 30 | grep -v '^- chore: bump version' || true)
+          fi
+          [ -z "$CHANGELOG" ] && CHANGELOG="- No user-facing changes recorded."
+          NOTES=$(printf 'Automated unsigned build of commit %s.\n\n## Changes since %s\n%s' "$GITHUB_SHA" "${PREV_TAG:-the beginning}" "$CHANGELOG")
+
           echo "Publishing $VERSION with:"
           echo "$FILES"
           gh release create "$VERSION" $FILES \
             --target apocentro-desktop \
             --title "Apocentro Desktop $VERSION" \
-            --notes "Automated unsigned build of commit ${GITHUB_SHA}." \
+            --notes "$NOTES" \
             --prerelease
