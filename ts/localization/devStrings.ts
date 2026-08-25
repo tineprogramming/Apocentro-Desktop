@@ -75,8 +75,11 @@ export const devSimpleNoArgs = {
   connectionDetailsShowDev: 'Show connection details',
   connectionDetailsHideDev: 'Hide connection details',
 
-  // Apocentro left pane "unreplied" filter
+  // Apocentro left pane All/Unread/Unreplied filter chips
+  filterAllDev: 'All',
+  filterUnreadDev: 'Unread',
   filterUnrepliedDev: 'Unreplied',
+  filterUnreadEmptyDev: 'No unread chats',
   filterUnrepliedEmptyDev: 'Nothing waiting on a reply',
 } as const;
 

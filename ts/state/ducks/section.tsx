@@ -36,20 +36,23 @@ type RightPanelMessageInfoState = {
 };
 export type RightOverlayMode = RightPanelDefaultState | RightPanelMessageInfoState;
 
+// Apocentro: narrows the left pane conversation list.
+// 'unread' = any conversation with unread messages.
+// 'unreplied' = unread AND we haven't sent the last message (still waiting on us).
+export type ConversationFilterType = 'all' | 'unread' | 'unreplied';
+
 export const initialSectionState: SectionStateType = {
   isAppFocused: false,
   leftOverlayMode: undefined,
   rightOverlayMode: { type: 'default', params: null },
-  filterUnreplied: false,
+  conversationFilter: 'all',
 };
 
 export type SectionStateType = {
   isAppFocused: boolean;
   leftOverlayMode: LeftOverlayMode | undefined;
   rightOverlayMode: RightOverlayMode | undefined;
-  // Apocentro: when true, the left pane conversation list is narrowed to
-  // conversations with unread messages we haven't replied to yet.
-  filterUnreplied: boolean;
+  conversationFilter: ConversationFilterType;
 };
 
 const sectionSlice = createSlice({
@@ -86,10 +89,10 @@ const sectionSlice = createSlice({
         isAppFocused: action.payload,
       };
     },
-    toggleFilterUnreplied(state) {
+    setConversationFilter(state, action: PayloadAction<ConversationFilterType>) {
       return {
         ...state,
-        filterUnreplied: !state.filterUnreplied,
+        conversationFilter: action.payload,
       };
     },
   },
