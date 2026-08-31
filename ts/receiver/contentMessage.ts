@@ -517,11 +517,15 @@ async function handleUnsendMessage(
         actionContextIsUI: false,
       });
     } else if (conversation.isPrivate() && !conversation.isPrivateAndBlinded()) {
-      // in a 1o1 conversation (not NTS), processing an unsend request is marking the message as deleted globally
+      // Apocentro: in a 1o1 conversation (not NTS), an unsend request removes the
+      // message outright rather than leaving a "This message was deleted" placeholder,
+      // so a chat deleted for everyone actually disappears on this side instead of
+      // turning into a column of placeholders. Groups and communities keep the
+      // placeholder, where knowing a message was removed still matters.
       await deleteOrMarkAsDeletedMessages({
         conversation,
         messages,
-        deletionType: 'markDeletedGlobally',
+        deletionType: 'complete',
         actionContextIsUI: false,
       });
     }
