@@ -1,5 +1,8 @@
 import { getAppDispatch } from '../../state/dispatch';
-import { deleteAllMessagesByConvoIdNoConfirmation } from '../../interactions/conversationInteractions';
+import {
+  clearAllMessagesForEveryone1o1,
+  deleteAllMessagesByConvoIdNoConfirmation,
+} from '../../interactions/conversationInteractions';
 import { updateConfirmModal } from '../../state/ducks/modalDialog';
 import { SessionButtonColor } from '../basic/SessionButton';
 import { tr, type TrArgs } from '../../localization/localeTools';
@@ -62,6 +65,14 @@ export function useClearAllMessagesCb({ conversationId }: { conversationId: stri
           }) as any
         );
       });
+    } else if (canClearForEveryone1o1 && args[0] === clearMessagesForEveryone) {
+      try {
+        await clearAllMessagesForEveryone1o1(conversationId);
+        ToastUtils.pushDeleted(2);
+      } catch (error) {
+        ToastUtils.pushToastError('clearMessagesForEveryone', String(error));
+      }
+      onClickClose();
     } else {
       await deleteAllMessagesByConvoIdNoConfirmation(conversationId);
       ToastUtils.pushDeleted(2);
@@ -70,6 +81,9 @@ export function useClearAllMessagesCb({ conversationId }: { conversationId: stri
   };
 
   const isGroupV2AndAdmin = isGroupV2 && weAreAdmin;
+  // Apocentro: 1:1 chats have no "admin", but either participant can request
+  // deletion of the whole shared thread -- mirrors the group admin case.
+  const canClearForEveryone1o1 = isPrivate && !isMe;
 
   const i18nMessage: TrArgs | null = isMe
     ? { token: 'clearMessagesNoteToSelfDescriptionUpdated' }
@@ -93,7 +107,7 @@ export function useClearAllMessagesCb({ conversationId }: { conversationId: stri
     throw new Error('useClearAllMessagesCb: invalid case');
   }
 
-  const radioOptions: RadioOptions | undefined = isGroupV2AndAdmin
+  const radioOptions: RadioOptions | undefined = isGroupV2AndAdmin || canClearForEveryone1o1
     ? {
         items: [
           {

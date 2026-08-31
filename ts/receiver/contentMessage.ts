@@ -452,13 +452,6 @@ async function handleUnsendMessage(
 ) {
   const { author: messageAuthor, timestamp } = unsendMessage;
   window.log.info(`handleUnsendMessage from ${messageAuthor}: of timestamp: ${timestamp}`);
-  if (messageAuthor !== envelope.getAuthor()) {
-    window?.log?.error(
-      'handleUnsendMessage: Dropping request as the author and the sender differs.'
-    );
-
-    return;
-  }
   if (!unsendMessage) {
     window?.log?.error('handleUnsendMessage: Invalid parameters -- dropping message.');
 
@@ -485,6 +478,27 @@ async function handleUnsendMessage(
     if (!conversation) {
       return;
     }
+
+    // Apocentro: in a 1:1 conversation, either participant may request deletion of
+    // ANY message in that specific shared thread (not just ones they themselves
+    // authored) -- mirrors Telegram's "Delete for Everyone" for private chats.
+    // Scoped strictly to the thread the target message actually belongs to (the
+    // requester must be that thread's other participant), so this can't be used
+    // to reach into an unrelated conversation.
+    const isConversationPartnerRequestingSharedThread =
+      conversation.isPrivate() &&
+      !conversation.isMe() &&
+      !conversation.isPrivateAndBlinded() &&
+      conversation.id === envelope.getAuthor();
+
+    if (messageAuthor !== envelope.getAuthor() && !isConversationPartnerRequestingSharedThread) {
+      window?.log?.error(
+        'handleUnsendMessage: Dropping request as the author and the sender differs.'
+      );
+
+      return;
+    }
+
     const messages = [messageToDelete];
 
     if (conversation.isMe()) {
