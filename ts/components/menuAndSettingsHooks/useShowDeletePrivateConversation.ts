@@ -27,6 +27,26 @@ const useConversationUsernameWithFallbackInternal = useConversationUsernameWithF
 
 const deleteConversationForEveryone = 'deleteConversationForEveryone';
 
+/**
+ * Note: deliberately a plain function rather than inline in the hook below. The react
+ * compiler cannot yet handle a try/catch containing value blocks (optional chaining and
+ * friends), so keeping this out of the hook body is what lets the hook compile.
+ *
+ * Returns true when the conversation was wiped for both participants.
+ */
+async function clearForEveryoneReportingFailure(conversationId: string): Promise<boolean> {
+  try {
+    await clearAllMessagesForEveryone1o1(conversationId);
+    return true;
+  } catch (error) {
+    window?.log?.warn(
+      'useShowDeletePrivateConversationCb: failed to delete for everyone',
+      error
+    );
+    return false;
+  }
+}
+
 export function useShowDeletePrivateConversationCb({ conversationId }: { conversationId: string }) {
   const showDeletePrivateConversation = useShowDeletePrivateConversation({ conversationId });
   const dispatch = getAppDispatch();
@@ -76,15 +96,10 @@ export function useShowDeletePrivateConversationCb({ conversationId }: { convers
         radioOptions,
         onClickOk: async (...args: Array<any>) => {
           if (canDeleteForEveryone && args[0] === deleteConversationForEveryone) {
-            try {
-              // wipe the whole thread for both participants before removing the
-              // conversation itself, while we still have the messages to unsend
-              await clearAllMessagesForEveryone1o1(conversationId);
-            } catch (error) {
-              window?.log?.warn(
-                'useShowDeletePrivateConversationCb: failed to delete for everyone',
-                error
-              );
+            // wipe the whole thread for both participants before removing the
+            // conversation itself, while we still have the messages to unsend
+            const clearedForEveryone = await clearForEveryoneReportingFailure(conversationId);
+            if (!clearedForEveryone) {
               ToastUtils.pushToastError(
                 deleteConversationForEveryone,
                 tr('deleteConversationForEveryoneFailedDev')
