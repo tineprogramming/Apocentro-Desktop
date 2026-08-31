@@ -308,10 +308,13 @@ async function doDeleteSelectedMessages({
       ToastUtils.pushFailedToDelete(selectedMessages.length);
       return false;
     }
+    // Apocentro: remove the messages outright rather than leaving a "This message was
+    // deleted" placeholder. The other side now does the same on receipt, so a 1:1
+    // delete for everyone leaves nothing behind on either device.
     await deleteOrMarkAsDeletedMessages({
       conversation,
       messages: selectedMessages,
-      deletionType: 'markDeletedGlobally',
+      deletionType: 'complete',
       actionContextIsUI: true,
     });
 
