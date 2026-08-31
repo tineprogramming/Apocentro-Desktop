@@ -8,15 +8,22 @@ name: Apocentro Build
 # - Windows: NSIS installer (.exe)
 # - macOS:   .dmg (unsigned, best-effort — may need certs; continue-on-error)
 #
-# Trigger it from the Actions tab ("Run workflow") or it runs on push to
-# apocentro-desktop — every merged PR gets exactly one real build (the one
-# that also bumps the version and publishes a Release), instead of one on
-# the working branch and another on merge. Use "Run workflow"
-# (workflow_dispatch) to build a feature branch manually when you want
-# installers to test before merging.
+# Two builds per change, at the two moments that matter:
+#
+# - pull_request: so a change is known to compile before it's merged. We
+#   previously built only on push to apocentro-desktop, which meant a PR
+#   could sit for days having never been compiled anywhere, and a broken
+#   build only surfaced once it had already landed.
+# - push to apocentro-desktop: the real, shipped build — the one that also
+#   bumps the version and publishes a versioned Release with installers.
+#
+# Working branches are deliberately not built on push: with pull_request
+# covering them, that would be a third build of the same commits. Use
+# "Run workflow" (workflow_dispatch) to build a branch that has no PR yet.
 
 on:
   workflow_dispatch:
+  pull_request:
   push:
     branches:
       - apocentro-desktop
