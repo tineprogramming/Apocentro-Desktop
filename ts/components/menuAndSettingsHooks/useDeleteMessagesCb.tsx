@@ -106,7 +106,10 @@ export function useDeleteMessagesCb(conversationId: string | undefined) {
     // Apocentro: in a 1:1 chat there's no "admin", but either participant can
     // request deletion of any message in their shared thread -- mirrors the
     // group admin case, and matches the "clear whole chat for everyone" flow.
-    const canDeleteAllForEveryoneAsPrivateChatPartner = isPrivateChat && !isNts;
+    // Blinded conversations (community DMs) are excluded: unsend requests need a
+    // 05 key, so offering "for everyone" there would always fail.
+    const canDeleteAllForEveryoneAsPrivateChatPartner =
+      isPrivateChat && !isNts && PubKey.is05Pubkey(conversationId);
     const canDeleteAllForEveryone =
       (canDeleteAllForEveryoneAsMe ||
         canDeleteAllForEveryoneAsAdmin ||

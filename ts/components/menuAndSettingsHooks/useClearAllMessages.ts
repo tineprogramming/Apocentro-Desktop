@@ -17,6 +17,7 @@ import {
   useWeAreAdmin,
 } from '../../hooks/useParamSelector';
 import { ToastUtils } from '../../session/utils';
+import { PubKey } from '../../session/types';
 import { groupInfoActions } from '../../state/ducks/metaGroups';
 import type { RadioOptions } from '../dialog/SessionConfirm';
 
@@ -83,7 +84,9 @@ export function useClearAllMessagesCb({ conversationId }: { conversationId: stri
   const isGroupV2AndAdmin = isGroupV2 && weAreAdmin;
   // Apocentro: 1:1 chats have no "admin", but either participant can request
   // deletion of the whole shared thread -- mirrors the group admin case.
-  const canClearForEveryone1o1 = isPrivate && !isMe;
+  // Blinded conversations (community DMs) are excluded: we have no way to reach
+  // the other side's swarm for them, so "for everyone" could never work there.
+  const canClearForEveryone1o1 = isPrivate && !isMe && PubKey.is05Pubkey(conversationId);
 
   const i18nMessage: TrArgs | null = isMe
     ? { token: 'clearMessagesNoteToSelfDescriptionUpdated' }

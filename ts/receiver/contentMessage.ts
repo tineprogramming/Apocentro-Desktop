@@ -482,16 +482,23 @@ async function handleUnsendMessage(
     // Apocentro: in a 1:1 conversation, either participant may request deletion of
     // ANY message in that specific shared thread (not just ones they themselves
     // authored) -- mirrors Telegram's "Delete for Everyone" for private chats.
-    // Scoped strictly to the thread the target message actually belongs to (the
-    // requester must be that thread's other participant), so this can't be used
-    // to reach into an unrelated conversation.
+    // Scoped strictly to the thread the target message actually belongs to, so this
+    // can't be used to reach into an unrelated conversation: the request must be
+    // authenticated as coming either from that thread's other participant, or from
+    // one of our own linked devices (which is how a delete made on another device
+    // of ours reaches this one).
+    const isSharedOneOnOneThread =
+      conversation.isPrivate() && !conversation.isMe() && !conversation.isPrivateAndBlinded();
     const isConversationPartnerRequestingSharedThread =
-      conversation.isPrivate() &&
-      !conversation.isMe() &&
-      !conversation.isPrivateAndBlinded() &&
-      conversation.id === envelope.getAuthor();
+      isSharedOneOnOneThread && conversation.id === envelope.getAuthor();
+    const isOurOwnDeviceRequesting =
+      isSharedOneOnOneThread && isUsFromCache(envelope.getAuthor());
 
-    if (messageAuthor !== envelope.getAuthor() && !isConversationPartnerRequestingSharedThread) {
+    if (
+      messageAuthor !== envelope.getAuthor() &&
+      !isConversationPartnerRequestingSharedThread &&
+      !isOurOwnDeviceRequesting
+    ) {
       window?.log?.error(
         'handleUnsendMessage: Dropping request as the author and the sender differs.'
       );

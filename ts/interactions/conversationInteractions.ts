@@ -271,8 +271,15 @@ export async function deleteAllMessagesByConvoIdNoConfirmation(conversationId: s
  */
 export async function clearAllMessagesForEveryone1o1(conversationId: string) {
   const conversation = ConvoHub.use().get(conversationId);
-  if (!conversation || !conversation.isPrivate() || conversation.isMe()) {
-    throw new Error('clearAllMessagesForEveryone1o1 only works with 1:1 conversations');
+  if (
+    !conversation ||
+    !conversation.isPrivate() ||
+    conversation.isMe() ||
+    // unsend requests (and the swarm deletion below) need a 05 key, so blinded
+    // community DMs can't be cleared for everyone
+    !PubKey.is05Pubkey(conversation.id)
+  ) {
+    throw new Error('clearAllMessagesForEveryone1o1 only works with unblinded 1:1 conversations');
   }
 
   // Grab every non-deleted message still in the thread before it's wiped
