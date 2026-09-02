@@ -237,7 +237,7 @@ declare module 'react' {
     | 'message'
     | 'name'
     | 'count'
-    | 'auto-clear-use-global'
+    | 'auto-clear-useGlobal'
     | 'auto-clear-off'
     | 'auto-clear-device_only'
     | 'auto-clear-others_only'
