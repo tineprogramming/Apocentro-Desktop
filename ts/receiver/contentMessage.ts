@@ -452,13 +452,6 @@ async function handleUnsendMessage(
 ) {
   const { author: messageAuthor, timestamp } = unsendMessage;
   window.log.info(`handleUnsendMessage from ${messageAuthor}: of timestamp: ${timestamp}`);
-  if (messageAuthor !== envelope.getAuthor()) {
-    window?.log?.error(
-      'handleUnsendMessage: Dropping request as the author and the sender differs.'
-    );
-
-    return;
-  }
   if (!unsendMessage) {
     window?.log?.error('handleUnsendMessage: Invalid parameters -- dropping message.');
 
@@ -485,6 +478,34 @@ async function handleUnsendMessage(
     if (!conversation) {
       return;
     }
+
+    // Apocentro: in a 1:1 conversation, either participant may request deletion of
+    // ANY message in that specific shared thread (not just ones they themselves
+    // authored) -- mirrors Telegram's "Delete for Everyone" for private chats.
+    // Scoped strictly to the thread the target message actually belongs to, so this
+    // can't be used to reach into an unrelated conversation: the request must be
+    // authenticated as coming either from that thread's other participant, or from
+    // one of our own linked devices (which is how a delete made on another device
+    // of ours reaches this one).
+    const isSharedOneOnOneThread =
+      conversation.isPrivate() && !conversation.isMe() && !conversation.isPrivateAndBlinded();
+    const isConversationPartnerRequestingSharedThread =
+      isSharedOneOnOneThread && conversation.id === envelope.getAuthor();
+    const isOurOwnDeviceRequesting =
+      isSharedOneOnOneThread && isUsFromCache(envelope.getAuthor());
+
+    if (
+      messageAuthor !== envelope.getAuthor() &&
+      !isConversationPartnerRequestingSharedThread &&
+      !isOurOwnDeviceRequesting
+    ) {
+      window?.log?.error(
+        'handleUnsendMessage: Dropping request as the author and the sender differs.'
+      );
+
+      return;
+    }
+
     const messages = [messageToDelete];
 
     if (conversation.isMe()) {
@@ -496,11 +517,15 @@ async function handleUnsendMessage(
         actionContextIsUI: false,
       });
     } else if (conversation.isPrivate() && !conversation.isPrivateAndBlinded()) {
-      // in a 1o1 conversation (not NTS), processing an unsend request is marking the message as deleted globally
+      // Apocentro: in a 1o1 conversation (not NTS), an unsend request removes the
+      // message outright rather than leaving a "This message was deleted" placeholder,
+      // so a chat deleted for everyone actually disappears on this side instead of
+      // turning into a column of placeholders. Groups and communities keep the
+      // placeholder, where knowing a message was removed still matters.
       await deleteOrMarkAsDeletedMessages({
         conversation,
         messages,
-        deletionType: 'markDeletedGlobally',
+        deletionType: 'complete',
         actionContextIsUI: false,
       });
     }

@@ -5,6 +5,7 @@ import { updateConfirmModal } from '../../state/ducks/modalDialog';
 import {
   useIsLegacyGroup,
   useIsMe,
+  useIsPrivate,
   useIsPublic,
   useWeAreAdmin,
 } from '../../hooks/useParamSelector';
@@ -55,6 +56,7 @@ export function useDeleteMessagesCb(conversationId: string | undefined) {
   const weAreAdminOrModCommunity = useWeAreCommunityAdminOrModerator(conversationId);
   const weAreAdminGroup = useWeAreAdmin(conversationId);
   const isLegacyGroup = useIsLegacyGroup(conversationId);
+  const isPrivateChat = useIsPrivate(conversationId);
 
   const closeDialog = () => dispatch(updateConfirmModal(null));
 
@@ -101,8 +103,17 @@ export function useDeleteMessagesCb(conversationId: string | undefined) {
     const sharedCannotDeleteForEveryone = anyAreControlMessages || anyAreMarkAsDeleted;
 
     const canDeleteAllForEveryoneAsMe = senders.every(isUsAnySogsFromCache);
+    // Apocentro: in a 1:1 chat there's no "admin", but either participant can
+    // request deletion of any message in their shared thread -- mirrors the
+    // group admin case, and matches the "clear whole chat for everyone" flow.
+    // Blinded conversations (community DMs) are excluded: unsend requests need a
+    // 05 key, so offering "for everyone" there would always fail.
+    const canDeleteAllForEveryoneAsPrivateChatPartner =
+      isPrivateChat && !isNts && PubKey.is05Pubkey(conversationId);
     const canDeleteAllForEveryone =
-      (canDeleteAllForEveryoneAsMe || canDeleteAllForEveryoneAsAdmin) &&
+      (canDeleteAllForEveryoneAsMe ||
+        canDeleteAllForEveryoneAsAdmin ||
+        canDeleteAllForEveryoneAsPrivateChatPartner) &&
       !sharedCannotDeleteForEveryone;
 
     const canDeleteFromAllDevices = isNts && !sharedCannotDeleteForEveryone;
@@ -297,10 +308,13 @@ async function doDeleteSelectedMessages({
       ToastUtils.pushFailedToDelete(selectedMessages.length);
       return false;
     }
+    // Apocentro: remove the messages outright rather than leaving a "This message was
+    // deleted" placeholder. The other side now does the same on receipt, so a 1:1
+    // delete for everyone leaves nothing behind on either device.
     await deleteOrMarkAsDeletedMessages({
       conversation,
       messages: selectedMessages,
-      deletionType: 'markDeletedGlobally',
+      deletionType: 'complete',
       actionContextIsUI: true,
     });
 
@@ -488,7 +502,7 @@ async function deleteOpenGroupMessages(messages: Array<MessageModel>, convo: Con
   return true;
 }
 
-async function unsendMessagesForEveryone1o1(
+export async function unsendMessagesForEveryone1o1(
   conversation: ConversationModel,
   unsendMsgObjects: Array<UnsendMessage>
 ) {
@@ -554,7 +568,7 @@ async function unsendMessagesForEveryoneGroupV2({
   return !!storedAt;
 }
 
-function getUnsendMessagesObjects1o1(
+export function getUnsendMessagesObjects1o1(
   conversation: ConversationModel,
   messages: Array<MessageModel>
 ) {

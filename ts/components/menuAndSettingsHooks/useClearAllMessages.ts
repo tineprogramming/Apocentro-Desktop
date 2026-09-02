@@ -1,5 +1,8 @@
 import { getAppDispatch } from '../../state/dispatch';
-import { deleteAllMessagesByConvoIdNoConfirmation } from '../../interactions/conversationInteractions';
+import {
+  clearAllMessagesForEveryone1o1,
+  deleteAllMessagesByConvoIdNoConfirmation,
+} from '../../interactions/conversationInteractions';
 import { updateConfirmModal } from '../../state/ducks/modalDialog';
 import { SessionButtonColor } from '../basic/SessionButton';
 import { tr, type TrArgs } from '../../localization/localeTools';
@@ -14,6 +17,7 @@ import {
   useWeAreAdmin,
 } from '../../hooks/useParamSelector';
 import { ToastUtils } from '../../session/utils';
+import { PubKey } from '../../session/types';
 import { groupInfoActions } from '../../state/ducks/metaGroups';
 import type { RadioOptions } from '../dialog/SessionConfirm';
 
@@ -62,6 +66,14 @@ export function useClearAllMessagesCb({ conversationId }: { conversationId: stri
           }) as any
         );
       });
+    } else if (canClearForEveryone1o1 && args[0] === clearMessagesForEveryone) {
+      try {
+        await clearAllMessagesForEveryone1o1(conversationId);
+        ToastUtils.pushDeleted(2);
+      } catch (error) {
+        ToastUtils.pushToastError('clearMessagesForEveryone', String(error));
+      }
+      onClickClose();
     } else {
       await deleteAllMessagesByConvoIdNoConfirmation(conversationId);
       ToastUtils.pushDeleted(2);
@@ -70,6 +82,11 @@ export function useClearAllMessagesCb({ conversationId }: { conversationId: stri
   };
 
   const isGroupV2AndAdmin = isGroupV2 && weAreAdmin;
+  // Apocentro: 1:1 chats have no "admin", but either participant can request
+  // deletion of the whole shared thread -- mirrors the group admin case.
+  // Blinded conversations (community DMs) are excluded: we have no way to reach
+  // the other side's swarm for them, so "for everyone" could never work there.
+  const canClearForEveryone1o1 = isPrivate && !isMe && PubKey.is05Pubkey(conversationId);
 
   const i18nMessage: TrArgs | null = isMe
     ? { token: 'clearMessagesNoteToSelfDescriptionUpdated' }
@@ -93,7 +110,7 @@ export function useClearAllMessagesCb({ conversationId }: { conversationId: stri
     throw new Error('useClearAllMessagesCb: invalid case');
   }
 
-  const radioOptions: RadioOptions | undefined = isGroupV2AndAdmin
+  const radioOptions: RadioOptions | undefined = isGroupV2AndAdmin || canClearForEveryone1o1
     ? {
         items: [
           {

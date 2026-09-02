@@ -75,6 +75,11 @@ export const devSimpleNoArgs = {
   connectionDetailsShowDev: 'Show connection details',
   connectionDetailsHideDev: 'Hide connection details',
 
+  // Apocentro 1:1 delete conversation (device only vs for everyone)
+  deleteOnThisDeviceDev: 'Delete on this device',
+  deleteConversationForEveryoneDev: 'Delete for everyone',
+  deleteConversationForEveryoneFailedDev: 'Could not delete this conversation for everyone.',
+
   // Apocentro left pane All/Unread/Unreplied filter chips
   filterAllDev: 'All',
   filterUnreadDev: 'Unread',
