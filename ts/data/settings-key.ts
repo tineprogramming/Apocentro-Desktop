@@ -96,6 +96,13 @@ export const SettingsKey = {
   // NOTE: for these CTAs undefined means it has never been shown in this cycle of pro access, true means it needs to be shown and false means it has been shown and dont show it again.
   proExpiringSoonCTA: 'proExpiringSoonCTA',
   proExpiredCTA: 'proExpiredCTA',
+  /**
+   * Apocentro message cleaner: the global auto-clear retention policy, stored as
+   * `scope|amount|unit` (e.g. `both|12|hours`). Unset means no global timer.
+   * A per-conversation policy lives under its own `autoClearConversation_<id>` key
+   * and overrides this one.
+   */
+  autoClearGlobal: 'autoClearGlobal',
 } as const;
 
 export const KNOWN_BLINDED_KEYS_ITEM = 'KNOWN_BLINDED_KEYS_ITEM';

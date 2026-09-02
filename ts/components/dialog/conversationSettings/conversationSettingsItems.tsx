@@ -2,6 +2,8 @@ import {
   useDisappearingMessageSettingText,
   useIsClosedGroup,
   useIsGroupV2,
+  useIsKickedFromGroup,
+  useIsMe,
   useIsPinned,
   useIsPublic,
   useNotificationSetting,
@@ -21,6 +23,8 @@ import { useLocalisedNotificationOf } from '../../menuAndSettingsHooks/useLocali
 import { useShowBlockUnblock } from '../../menuAndSettingsHooks/useShowBlockUnblock';
 import { useShowDeletePrivateContactCb } from '../../menuAndSettingsHooks/useShowDeletePrivateContact';
 import { useClearAllMessagesCb } from '../../menuAndSettingsHooks/useClearAllMessages';
+import { updateAutoClearModal } from '../../../state/ducks/modalDialog';
+import { getAppDispatch } from '../../../state/dispatch';
 import { useHideNoteToSelfCb } from '../../menuAndSettingsHooks/useHideNoteToSelf';
 import { useShowDeletePrivateConversationCb } from '../../menuAndSettingsHooks/useShowDeletePrivateConversation';
 import { useShowInviteContactToCommunity } from '../../menuAndSettingsHooks/useShowInviteContactToCommunity';
@@ -414,6 +418,37 @@ export function InviteContactsToGroupV2Button({ conversationId }: WithConvoId) {
       text={{ token: 'membersInvite' }}
       onClick={showInviteContactToGroupCb}
       dataTestId="invite-contacts-menu-option"
+    />
+  );
+}
+
+/**
+ * Apocentro message cleaner: the per-conversation retention policy.
+ *
+ * Hidden for communities (we can never clear anyone else's copy there) and for
+ * Note to Self, which the sweep skips outright -- a switch that provably does
+ * nothing is worse than no switch.
+ */
+export function AutoClearButton({ conversationId }: WithConvoId) {
+  const dispatch = getAppDispatch();
+  const isPublic = useIsPublic(conversationId);
+  const isMe = useIsMe(conversationId);
+  const isKickedFromGroup = useIsKickedFromGroup(conversationId);
+
+  if (isPublic || isMe || isKickedFromGroup) {
+    return null;
+  }
+
+  return (
+    <PanelIconButton
+      iconElement={<PanelIconLucideIcon unicode={LUCIDE_ICONS_UNICODE.REPEAT_2} />}
+      text={{ token: 'autoClearDev' }}
+      subText={{ token: 'autoClearShortDescriptionDev' }}
+      subTextDataTestId="auto-clear-details-menu-option"
+      dataTestId="auto-clear-menu-option"
+      onClick={() => {
+        dispatch(updateAutoClearModal({ conversationId }));
+      }}
     />
   );
 }

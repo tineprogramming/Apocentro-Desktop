@@ -84,6 +84,24 @@ export const devSimpleNoArgs = {
   // Apocentro message cleaner
   clearOthersOnlyDev: "Clear from other people's devices only",
   clearMessagesFailedDev: 'Could not clear those messages.',
+  messageCleanerDev: 'Message cleaner',
+  clearAllHistoryDev: 'Clear all message history',
+  clearAllHistoryDescriptionDev:
+    'Clear the messages in every conversation at once. Note to Self is left alone.',
+  clearAllHistoryConfirmDev:
+    'Are you sure you want to clear the messages in every conversation? This cannot be undone.',
+  clearedAllHistoryDev: 'Cleared every conversation.',
+  autoClearDev: 'Auto-clear messages',
+  autoClearShortDescriptionDev: 'Automatically delete messages once they reach a chosen age.',
+  autoClearSettingsDescriptionDev:
+    'Delete messages automatically once they reach a chosen age. This keeps applying for as long as it is on, not just once.',
+  autoClearUseGlobalDev: 'Use global setting',
+  autoClearOffDev: 'Off',
+  autoClearOlderThanDev: 'Delete messages older than:',
+  autoClearAmountPlaceholderDev: 'Amount',
+  autoClearAmountInvalidDev: 'Enter a whole number greater than 0',
+  autoClearHoursDev: 'Hours',
+  autoClearDaysDev: 'Days',
 
   // Apocentro left pane All/Unread/Unreplied filter chips
   filterAllDev: 'All',

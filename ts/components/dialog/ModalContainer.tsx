@@ -6,6 +6,7 @@ import {
   useUpdateGroupMembersModal,
   useUpdateConversationDetailsModal,
   useUserProfileModal,
+  useAutoClearModal,
   useChangeNickNameDialog,
   useUserSettingsModal,
   useOnionPathDialog,
@@ -39,6 +40,7 @@ import { OnionPathModal } from './OnionStatusPathDialog';
 import { ReactClearAllModal } from './ReactClearAllModal';
 import { ReactListModal } from './ReactListModal';
 import { SessionNicknameDialog } from './SessionNicknameDialog';
+import { AutoClearDialog } from './AutoClearDialog';
 import { UpdateGroupMembersDialog } from './UpdateGroupMembersDialog';
 import { UpdateConversationDetailsDialog } from './UpdateConversationDetailsDialog';
 import { UserProfileModal } from './UserProfileModal';
@@ -62,6 +64,7 @@ export const ModalContainer = () => {
   const updateConversationDetailsModalState = useUpdateConversationDetailsModal();
   const userProfileModalState = useUserProfileModal();
   const changeNicknameModal = useChangeNickNameDialog();
+  const autoClearModal = useAutoClearModal();
   const userSettingsModalState = useUserSettingsModal();
   const onionPathModalState = useOnionPathDialog();
   const enterPasswordModalState = useEnterPasswordModal();
@@ -107,6 +110,7 @@ export const ModalContainer = () => {
         <UpdateConversationDetailsDialog {...updateConversationDetailsModalState} />
       )}
       {changeNicknameModal && <SessionNicknameDialog {...changeNicknameModal} />}
+      {autoClearModal && <AutoClearDialog {...autoClearModal} />}
       {enterPasswordModalState && <EnterPasswordModal {...enterPasswordModalState} />}
       {deleteAccountModalState && <DeleteAccountModal {...deleteAccountModalState} />}
       {reactClearAllModalState && <ReactClearAllModal {...reactClearAllModalState} />}

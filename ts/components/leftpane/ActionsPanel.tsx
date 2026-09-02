@@ -20,6 +20,7 @@ import { getOurNumber } from '../../state/selectors/user';
 import { DecryptedAttachmentsManager } from '../../session/crypto/DecryptedAttachmentsManager';
 
 import { DURATION } from '../../session/constants';
+import { runAutoClearSweep } from '../../interactions/conversations/autoClear';
 
 import {
   onionPathModal,
@@ -283,6 +284,17 @@ export const ActionsPanel = () => {
     // trigger an updates from the snodes and swarm every hour
     void SnodePool.forceRefreshRandomSnodePool();
     void SnodePool.getFreshSwarmFor(UserUtils.getOurPubKeyStrFromCache());
+  }, DURATION.HOURS * 1);
+
+  // Apocentro message cleaner: the auto-clear retention policy is a standing
+  // rule rather than a one-shot countdown, so it is re-applied hourly for as
+  // long as it stays on. It reads a couple of settings and returns immediately
+  // when nothing is configured, so the idle cost is nil.
+  useInterval(() => {
+    if (!ourPrimaryConversation) {
+      return;
+    }
+    void runAutoClearSweep();
   }, DURATION.HOURS * 1);
 
   useTimeoutFn(() => {

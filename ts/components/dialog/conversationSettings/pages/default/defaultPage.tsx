@@ -21,6 +21,7 @@ import {
   AttachmentsButton,
   UpdateDisappearingMessagesButton,
   ClearAllMessagesButton,
+  AutoClearButton,
   LeaveGroupPanelButton,
   DeleteGroupPanelButton,
   LeaveCommunityPanelButton,
@@ -130,6 +131,7 @@ function DefaultPageForPrivate({ conversationId }: WithConvoId) {
       <PanelButtonGroup>
         <CopyAccountIdButton conversationId={conversationId} />
         <UpdateDisappearingMessagesButton conversationId={conversationId} asAdmin={false} />
+        <AutoClearButton conversationId={conversationId} />
         <PinUnpinButton conversationId={conversationId} />
         <NotificationPanelButton convoId={conversationId} />
         <AttachmentsButton conversationId={conversationId} />
@@ -187,6 +189,7 @@ function DefaultPageForGroupV2({ conversationId }: WithConvoId) {
       {showAttachmentsCb ? (
         <PanelButtonGroup>
           <UpdateDisappearingMessagesButton conversationId={conversationId} asAdmin={false} />
+          <AutoClearButton conversationId={conversationId} />
           <PinUnpinButton conversationId={conversationId} />
           <NotificationPanelButton convoId={conversationId} />
           <UpdateGroupMembersButton conversationId={conversationId} asAdmin={false} />

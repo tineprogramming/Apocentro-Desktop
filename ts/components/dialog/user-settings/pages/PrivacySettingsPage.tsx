@@ -4,6 +4,7 @@ import { getAppDispatch } from '../../../../state/dispatch';
 
 import { tr } from '../../../../localization/localeTools';
 import {
+  updateAutoClearModal,
   updateConfirmModal,
   userSettingsModal,
   type UserSettingsModalState,
@@ -31,6 +32,15 @@ import { SettingsKey } from '../../../../data/settings-key';
 import { getPasswordHash, Storage } from '../../../../util/storage';
 import { SettingsToggleBasic } from '../components/SettingsToggleBasic';
 import { SettingsPanelButtonInlineBasic } from '../components/SettingsPanelButtonInlineBasic';
+import { PanelChevronButton } from '../../../buttons/panel/PanelChevronButton';
+import {
+  autoClearSummary,
+  getGlobalAutoClear,
+} from '../../../../interactions/conversations/autoClear';
+import {
+  cleanAllConversations,
+  type ClearScope,
+} from '../../../../interactions/conversations/messageCleaner';
 import { saveLogToDesktop } from '../../../../util/logger/renderer_process_logging';
 import { UserSettingsModalContainer } from '../components/UserSettingsModalContainer';
 import { UserConfigWrapperActions } from '../../../../webworker/workers/browser/libsession/libsession_worker_userconfig_interface';
@@ -154,6 +164,25 @@ function PasswordSubSection() {
   return <NoPasswordSubSection />;
 }
 
+const clearAllScopeValues = ['device_only', 'others_only', 'both'] as const;
+
+/**
+ * Note: deliberately a plain function rather than inline in the component below.
+ * The react compiler cannot yet handle value blocks inside a try/catch and fails
+ * the build over it.
+ */
+async function clearEveryConversation(scope: ClearScope) {
+  try {
+    const cleared = await cleanAllConversations({ scope });
+    pushToastSuccess('clearAllHistory', tr('clearedAllHistoryDev'));
+    return cleared;
+  } catch (error) {
+    window?.log?.warn('PrivacySettingsPage: clear all history failed', error);
+    pushToastError('clearAllHistory', tr('clearMessagesFailedDev'));
+    return 0;
+  }
+}
+
 export function PrivacySettingsPage(modalState: UserSettingsModalState) {
   const backAction = useUserSettingsBackAction(modalState);
   const closeAction = useUserSettingsCloseAction(modalState);
@@ -163,6 +192,38 @@ export function PrivacySettingsPage(modalState: UserSettingsModalState) {
   const isGiphyIntegrationOn = useHasGiphyIntegrationEnabled();
 
   const forceUpdate = useUpdate();
+  const dispatch = getAppDispatch();
+
+  const showClearAllHistoryDialog = () => {
+    dispatch(
+      updateConfirmModal({
+        title: { token: 'clearAllHistoryDev' },
+        i18nMessage: { token: 'clearAllHistoryConfirmDev' },
+        okTheme: SessionButtonColor.Danger,
+        okText: { token: 'clear' },
+        onClickClose: () => dispatch(updateConfirmModal(null)),
+        radioOptions: {
+          items: clearAllScopeValues.map(value => ({
+            value,
+            label:
+              value === 'device_only'
+                ? tr('clearOnThisDevice')
+                : value === 'others_only'
+                  ? tr('clearOthersOnlyDev')
+                  : tr('clearMessagesForEveryone'),
+            inputDataTestId: `input-auto-clear-${value}` as const,
+            labelDataTestId: `label-auto-clear-${value}` as const,
+          })),
+          defaultSelectedValue: 'device_only',
+        },
+        onClickOk: async (chosenOptionValue?: string) => {
+          const picked = clearAllScopeValues.find(v => v === chosenOptionValue) ?? 'device_only';
+          await clearEveryConversation(picked);
+          dispatch(updateConfirmModal(null));
+        },
+      })
+    );
+  };
 
   // Windows firewall exception state, so we can show "Allowed" (disabled) once
   // the rule exists instead of prompting for elevation again.
@@ -339,6 +400,38 @@ export function PrivacySettingsPage(modalState: UserSettingsModalState) {
           </PanelButtonGroup>
         </>
       ) : null}
+
+      {/* Apocentro message cleaner: the global counterparts of the per-conversation
+          clear options -- one action across every conversation, and a retention
+          policy that keeps applying rather than firing once. */}
+      <PanelLabelWithDescription title={{ token: 'messageCleanerDev' }} />
+      <PanelButtonGroup>
+        <PanelChevronButton
+          baseDataTestId="auto-clear"
+          textElement={
+            <PanelButtonTextWithSubText
+              text={{ token: 'autoClearDev' }}
+              subText={{ token: 'autoClearShortDescriptionDev' }}
+              // the live policy, which no localizer token can hold since it
+              // carries a number the user chose
+              extraSubTextNode={` — ${autoClearSummary(getGlobalAutoClear())}`}
+              textDataTestId="auto-clear-settings-text"
+              subTextDataTestId="auto-clear-settings-sub-text"
+            />
+          }
+          onClick={() => {
+            dispatch(updateAutoClearModal({ conversationId: null }));
+          }}
+        />
+        <SettingsPanelButtonInlineBasic
+          baseDataTestId="clear-all-history"
+          text={{ token: 'clearAllHistoryDev' }}
+          subText={{ token: 'clearAllHistoryDescriptionDev' }}
+          onClick={async () => showClearAllHistoryDialog()}
+          buttonColor={SessionButtonColor.Danger}
+          buttonText={tr('clear')}
+        />
+      </PanelButtonGroup>
 
       <PanelLabelWithDescription title={{ token: 'passwords' }} />
       <PasswordSubSection />

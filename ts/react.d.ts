@@ -36,6 +36,7 @@ declare module 'react' {
     | 'notifications'
     | 'invite-contacts'
     | 'clear-all-messages'
+    | 'auto-clear'
     | 'copy-account-id'
     | 'delete-conversation'
     | 'delete-contact'
@@ -105,7 +106,7 @@ declare module 'react' {
   type SettingsRadio =
     | `set-notifications-${'message' | 'name' | 'count'}`
     | `send-with-${'enterForSend' | 'enterForNewLine'}`;
-  type SettingsChevron = 'blocked-contacts' | 'update-access';
+  type SettingsChevron = 'blocked-contacts' | 'update-access' | 'auto-clear';
 
   type SettingsInlineButtons =
     | 'set-password'
@@ -113,6 +114,7 @@ declare module 'react' {
     | 'remove-password'
     | 'export-logs'
     | 'add-firewall-rule'
+    | 'clear-all-history'
     | 'hide-recovery-password';
   type SettingsExternalLinkButtons =
     | 'faq'
@@ -157,7 +159,8 @@ declare module 'react' {
     | 'display-name'
     | 'add-admins'
     | 'ban-user'
-    | 'unban-user';
+    | 'unban-user'
+    | 'auto-clear-amount';
 
   type ProBadges =
     | 'edit-profile-picture'
@@ -168,7 +171,7 @@ declare module 'react' {
     | 'message-info'
     | 'send-more';
 
-  type Dialog = 'invite-contacts' | 'user-settings';
+  type Dialog = 'invite-contacts' | 'user-settings' | 'auto-clear';
 
   type Buttons =
     | 'chooser-new-conversation'
@@ -233,7 +236,14 @@ declare module 'react' {
     | 'enterForNewLine'
     | 'message'
     | 'name'
-    | 'count';
+    | 'count'
+    | 'auto-clear-use-global'
+    | 'auto-clear-off'
+    | 'auto-clear-device_only'
+    | 'auto-clear-others_only'
+    | 'auto-clear-both'
+    | 'auto-clear-hours'
+    | 'auto-clear-days';
 
   type ConversationItemFlagsIds =
     | 'conversation-item-muted'

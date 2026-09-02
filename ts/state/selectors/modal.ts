@@ -47,6 +47,10 @@ export function useChangeNickNameDialog() {
   return useSelector((state: StateType) => getModal(state).nickNameModal);
 }
 
+export function useAutoClearModal() {
+  return useSelector((state: StateType) => getModal(state).autoClearModal);
+}
+
 export function useUserSettingsModal() {
   return useSelector((state: StateType) => getModal(state).userSettingsModal);
 }
