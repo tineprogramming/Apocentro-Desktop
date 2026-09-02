@@ -361,8 +361,12 @@ declare module 'react' {
     | 'clear-device-radio-option-label'
     | 'delete-everyone-radio-option'
     | 'delete-device-radio-option'
+    | 'delete-others-radio-option'
     | 'delete-everyone-radio-option-label'
     | 'delete-device-radio-option-label'
+    | 'delete-others-radio-option-label'
+    | 'clear-others-radio-option'
+    | 'clear-others-radio-option-label'
 
     // links
     | 'session-website-link'

@@ -11,7 +11,10 @@ import { SessionButtonColor } from '../basic/SessionButton';
 import { PubKey } from '../../session/types';
 import { ToastUtils } from '../../session/utils';
 import { tr } from '../../localization/localeTools';
-import { clearAllMessagesForEveryone1o1 } from '../../interactions/conversationInteractions';
+import {
+  cleanConversation,
+  type ClearScope,
+} from '../../interactions/conversations/messageCleaner';
 import type { RadioOptions } from '../dialog/SessionConfirm';
 
 function useShowDeletePrivateConversation({ conversationId }: { conversationId: string }) {
@@ -26,23 +29,24 @@ function useShowDeletePrivateConversation({ conversationId }: { conversationId: 
 const useConversationUsernameWithFallbackInternal = useConversationUsernameWithFallback;
 
 const deleteConversationForEveryone = 'deleteConversationForEveryone';
+const deleteOthersOnly = 'deleteOthersOnly';
 
 /**
  * Note: deliberately a plain function rather than inline in the hook below. The react
  * compiler cannot yet handle a try/catch containing value blocks (optional chaining and
  * friends), so keeping this out of the hook body is what lets the hook compile.
  *
- * Returns true when the conversation was wiped for both participants.
+ * Returns true when the remote deletion went out.
  */
-async function clearForEveryoneReportingFailure(conversationId: string): Promise<boolean> {
+async function clearRemotelyReportingFailure(
+  conversationId: string,
+  scope: ClearScope
+): Promise<boolean> {
   try {
-    await clearAllMessagesForEveryone1o1(conversationId);
+    await cleanConversation({ conversationId, scope });
     return true;
   } catch (error) {
-    window?.log?.warn(
-      'useShowDeletePrivateConversationCb: failed to delete for everyone',
-      error
-    );
+    window?.log?.warn('useShowDeletePrivateConversationCb: failed to delete remotely', error);
     return false;
   }
 }
@@ -76,6 +80,12 @@ export function useShowDeletePrivateConversationCb({ conversationId }: { convers
             labelDataTestId: 'delete-device-radio-option-label',
           },
           {
+            value: deleteOthersOnly,
+            label: tr('deleteOthersOnlyDev'),
+            inputDataTestId: 'delete-others-radio-option',
+            labelDataTestId: 'delete-others-radio-option-label',
+          },
+          {
             value: deleteConversationForEveryone,
             label: tr('deleteConversationForEveryoneDev'),
             inputDataTestId: 'delete-everyone-radio-option',
@@ -95,17 +105,31 @@ export function useShowDeletePrivateConversationCb({ conversationId }: { convers
         okTheme: SessionButtonColor.Danger,
         radioOptions,
         onClickOk: async (...args: Array<any>) => {
-          if (canDeleteForEveryone && args[0] === deleteConversationForEveryone) {
-            // wipe the whole thread for both participants before removing the
-            // conversation itself, while we still have the messages to unsend
-            const clearedForEveryone = await clearForEveryoneReportingFailure(conversationId);
-            if (!clearedForEveryone) {
+          const othersOnly = canDeleteForEveryone && args[0] === deleteOthersOnly;
+          const forEveryone = canDeleteForEveryone && args[0] === deleteConversationForEveryone;
+
+          if (othersOnly || forEveryone) {
+            // wipe the thread on the other side before removing the conversation
+            // itself, while we still have the messages to unsend
+            const cleared = await clearRemotelyReportingFailure(
+              conversationId,
+              othersOnly ? 'others_only' : 'both'
+            );
+            if (!cleared) {
               ToastUtils.pushToastError(
                 deleteConversationForEveryone,
                 tr('deleteConversationForEveryoneFailedDev')
               );
               return;
             }
+          }
+
+          if (othersOnly) {
+            // "others only" keeps our side of the conversation, so the thread
+            // itself stays in the list -- only their copies were removed.
+            dispatch(updateConfirmModal(null));
+            dispatch(updateConversationSettingsModal(null));
+            return;
           }
 
           await ConvoHub.use().delete1o1(conversationId, {

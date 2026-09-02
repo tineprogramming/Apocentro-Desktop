@@ -75,10 +75,15 @@ export const devSimpleNoArgs = {
   connectionDetailsShowDev: 'Show connection details',
   connectionDetailsHideDev: 'Hide connection details',
 
-  // Apocentro 1:1 delete conversation (device only vs for everyone)
+  // Apocentro 1:1 delete conversation (device only vs others only vs for everyone)
   deleteOnThisDeviceDev: 'Delete on this device',
+  deleteOthersOnlyDev: "Delete from other people's devices only",
   deleteConversationForEveryoneDev: 'Delete for everyone',
   deleteConversationForEveryoneFailedDev: 'Could not delete this conversation for everyone.',
+
+  // Apocentro message cleaner
+  clearOthersOnlyDev: "Clear from other people's devices only",
+  clearMessagesFailedDev: 'Could not clear those messages.',
 
   // Apocentro left pane All/Unread/Unreplied filter chips
   filterAllDev: 'All',

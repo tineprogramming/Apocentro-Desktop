@@ -1,8 +1,6 @@
 import { getAppDispatch } from '../../state/dispatch';
-import {
-  clearAllMessagesForEveryone1o1,
-  deleteAllMessagesByConvoIdNoConfirmation,
-} from '../../interactions/conversationInteractions';
+import { deleteAllMessagesByConvoIdNoConfirmation } from '../../interactions/conversationInteractions';
+import { cleanConversation } from '../../interactions/conversations/messageCleaner';
 import { updateConfirmModal } from '../../state/ducks/modalDialog';
 import { SessionButtonColor } from '../basic/SessionButton';
 import { tr, type TrArgs } from '../../localization/localeTools';
@@ -20,6 +18,22 @@ import { ToastUtils } from '../../session/utils';
 import { PubKey } from '../../session/types';
 import { groupInfoActions } from '../../state/ducks/metaGroups';
 import type { RadioOptions } from '../dialog/SessionConfirm';
+import type { ClearScope } from '../../interactions/conversations/messageCleaner';
+
+/**
+ * Note: deliberately a plain function rather than inline in the hook below. The react
+ * compiler cannot yet handle a try/catch containing value blocks (optional chaining and
+ * friends), so keeping this out of the hook body is what lets the hook compile.
+ */
+async function cleanReportingFailure(conversationId: string, scope: ClearScope): Promise<boolean> {
+  try {
+    await cleanConversation({ conversationId, scope });
+    return true;
+  } catch (error) {
+    window?.log?.warn('useClearAllMessagesCb: failed to clear remotely', error);
+    return false;
+  }
+}
 
 export function useClearAllMessagesCb({ conversationId }: { conversationId: string }) {
   const dispatch = getAppDispatch();
@@ -44,6 +58,7 @@ export function useClearAllMessagesCb({ conversationId }: { conversationId: stri
   };
 
   const clearMessagesForEveryone = 'clearMessagesForEveryone';
+  const clearOthersOnly = 'clearOthersOnly';
 
   const onClickOk = async (...args: Array<any>) => {
     if (isGroupV2AndAdmin && args[0] === clearMessagesForEveryone) {
@@ -66,12 +81,18 @@ export function useClearAllMessagesCb({ conversationId }: { conversationId: stri
           }) as any
         );
       });
-    } else if (canClearForEveryone1o1 && args[0] === clearMessagesForEveryone) {
-      try {
-        await clearAllMessagesForEveryone1o1(conversationId);
+    } else if (
+      canClearForEveryone1o1 &&
+      (args[0] === clearMessagesForEveryone || args[0] === clearOthersOnly)
+    ) {
+      const cleared = await cleanReportingFailure(
+        conversationId,
+        args[0] === clearOthersOnly ? 'others_only' : 'both'
+      );
+      if (cleared) {
         ToastUtils.pushDeleted(2);
-      } catch (error) {
-        ToastUtils.pushToastError('clearMessagesForEveryone', String(error));
+      } else {
+        ToastUtils.pushToastError('clearMessagesForEveryone', tr('clearMessagesFailedDev'));
       }
       onClickClose();
     } else {
@@ -110,25 +131,39 @@ export function useClearAllMessagesCb({ conversationId }: { conversationId: stri
     throw new Error('useClearAllMessagesCb: invalid case');
   }
 
-  const radioOptions: RadioOptions | undefined = isGroupV2AndAdmin || canClearForEveryone1o1
+  const deviceOnlyItem = {
+    value: 'clearOnThisDevice',
+    label: tr('clearOnThisDevice'),
+    inputDataTestId: 'clear-device-radio-option',
+    labelDataTestId: 'clear-device-radio-option-label',
+  } as const;
+  const forEveryoneItem = {
+    value: clearMessagesForEveryone,
+    label: tr(clearMessagesForEveryone),
+    inputDataTestId: 'clear-everyone-radio-option',
+    labelDataTestId: 'clear-everyone-radio-option-label',
+  } as const;
+  // Note: offered for 1:1 only. In a group the deletion reaches every member
+  // through a group message our own client also processes, so "others only"
+  // could not actually keep our copy -- see the PR description.
+  const othersOnlyItem = {
+    value: clearOthersOnly,
+    label: tr('clearOthersOnlyDev'),
+    inputDataTestId: 'clear-others-radio-option',
+    labelDataTestId: 'clear-others-radio-option-label',
+  } as const;
+
+  const radioOptions: RadioOptions | undefined = canClearForEveryone1o1
     ? {
-        items: [
-          {
-            value: 'clearOnThisDevice',
-            label: tr('clearOnThisDevice'),
-            inputDataTestId: 'clear-device-radio-option',
-            labelDataTestId: 'clear-device-radio-option-label',
-          },
-          {
-            value: clearMessagesForEveryone,
-            label: tr(clearMessagesForEveryone),
-            inputDataTestId: 'clear-everyone-radio-option',
-            labelDataTestId: 'clear-everyone-radio-option-label',
-          },
-        ] as const,
+        items: [deviceOnlyItem, othersOnlyItem, forEveryoneItem],
         defaultSelectedValue: 'clearOnThisDevice',
       }
-    : undefined;
+    : isGroupV2AndAdmin
+      ? {
+          items: [deviceOnlyItem, forEveryoneItem],
+          defaultSelectedValue: 'clearOnThisDevice',
+        }
+      : undefined;
 
   const cb = () =>
     dispatch(

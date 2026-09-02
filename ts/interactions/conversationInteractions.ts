@@ -40,11 +40,6 @@ import { MessageSender } from '../session/sending';
 import { StoreGroupRequestFactory } from '../session/apis/snode_api/factories/StoreGroupRequestFactory';
 import { DURATION } from '../session/constants';
 import { GroupInvite } from '../session/utils/job_runners/jobs/GroupInviteJob';
-import { deleteMessagesFromSwarmOnly } from './conversations/deleteMessagesFromSwarmOnly';
-import {
-  getUnsendMessagesObjects1o1,
-  unsendMessagesForEveryone1o1,
-} from './conversations/unsendMessages1o1';
 
 export async function copyPublicKeyByConvoId(convoId: string) {
   if (OpenGroupUtils.isOpenGroupV2(convoId)) {
@@ -261,50 +256,6 @@ export async function deleteAllMessagesByConvoIdNoConfirmation(conversationId: s
 
   await conversation.commit();
   window.inboxStore?.dispatch(conversationReset(conversationId));
-}
-
-/**
- * Deletes every message in a 1:1 conversation for both participants -- sends an
- * UnsendRequest covering the whole thread (mirrors the group admin "clear for
- * everyone" flow, but with no admin requirement since a 1:1 has only two equal
- * participants: either one can request it), then wipes the local copy.
- */
-export async function clearAllMessagesForEveryone1o1(conversationId: string) {
-  const conversation = ConvoHub.use().get(conversationId);
-  if (
-    !conversation ||
-    !conversation.isPrivate() ||
-    conversation.isMe() ||
-    // unsend requests (and the swarm deletion below) need a 05 key, so blinded
-    // community DMs can't be cleared for everyone
-    !PubKey.is05Pubkey(conversation.id)
-  ) {
-    throw new Error('clearAllMessagesForEveryone1o1 only works with unblinded 1:1 conversations');
-  }
-
-  // Grab every non-deleted message still in the thread before it's wiped
-  // locally, so we can request its deletion on both swarms. Control messages
-  // (join notices, etc) aren't real chat content, so only content messages
-  // get an unsend request -- everything still gets wiped locally below.
-  const messages = (
-    await Data.getLastMessagesByConversation({
-      conversationId,
-      limit: 100000,
-      skipTimerInit: true,
-      skipMarkedAsDeleted: true,
-    })
-  ).filter(message => !message.isControlMessage());
-
-  if (messages.length) {
-    // build the unsend objects before we delete the hashes from those messages
-    const unsendMsgObjects = getUnsendMessagesObjects1o1(conversation, messages);
-
-    await deleteMessagesFromSwarmOnly(conversation, messages);
-    await unsendMessagesForEveryone1o1(conversation, unsendMsgObjects);
-  }
-
-  // wipe our own local copy of the whole thread too
-  await deleteAllMessagesByConvoIdNoConfirmation(conversationId);
 }
 
 export async function setDisappearingMessagesByConvoId(
