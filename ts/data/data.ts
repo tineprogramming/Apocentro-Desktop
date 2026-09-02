@@ -246,7 +246,9 @@ async function removeMessagesByIds(ids: Array<string>): Promise<void> {
 
 async function removeAllMessagesInConversationSentBefore(args: {
   deleteBeforeSeconds: number;
-  conversationId: GroupPubkeyType;
+  // Note: not group-specific despite where it is used from -- the query filters by
+  // conversationId and sent_at only, so a 1:1 retention sweep uses it as-is.
+  conversationId: string;
 }): Promise<Array<string>> {
   return channels.removeAllMessagesInConversationSentBefore(args);
 }

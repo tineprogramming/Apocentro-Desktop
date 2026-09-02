@@ -44,7 +44,7 @@ import { deleteMessagesFromSwarmOnly } from './conversations/deleteMessagesFromS
 import {
   getUnsendMessagesObjects1o1,
   unsendMessagesForEveryone1o1,
-} from '../components/menuAndSettingsHooks/useDeleteMessagesCb';
+} from './conversations/unsendMessages1o1';
 
 export async function copyPublicKeyByConvoId(convoId: string) {
   if (OpenGroupUtils.isOpenGroupV2(convoId)) {

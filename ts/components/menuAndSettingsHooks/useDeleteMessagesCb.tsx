@@ -1,4 +1,3 @@
-import type { PubkeyType, GroupPubkeyType } from 'libsession_util_nodejs';
 import { compact, isArray } from 'lodash';
 import { useDispatch } from 'react-redux';
 import { updateConfirmModal } from '../../state/ducks/modalDialog';
@@ -17,23 +16,26 @@ import type { ConversationModel } from '../../models/conversation';
 import type { MessageModel } from '../../models/message';
 import { PubKey } from '../../session/types';
 import { ToastUtils } from '../../session/utils';
-import { UserGroupsWrapperActions } from '../../webworker/workers/browser/libsession_worker_interface';
 import { Data } from '../../data/data';
 import { MessageQueue } from '../../session/sending';
 
 import { deleteSogsMessageByServerIds } from '../../session/apis/open_group_api/sogsv3/sogsV3DeleteMessages';
 import { SnodeNamespaces } from '../../session/apis/snode_api/namespaces';
-import { getSodiumRenderer } from '../../session/crypto';
-import { GroupUpdateDeleteMemberContentMessage } from '../../session/messages/outgoing/controlMessage/group_v2/to_group/GroupUpdateDeleteMemberContentMessage';
 import { UnsendMessage } from '../../session/messages/outgoing/controlMessage/UnsendMessage';
-import { NetworkTime } from '../../util/NetworkTime';
 import { deleteOrMarkAsDeletedMessages } from '../../interactions/conversations/deleteOrMarkAsDeletedMessages';
 import { sectionActions } from '../../state/ducks/section';
 import { ConvoHub } from '../../session/conversations';
-import { uuidV4 } from '../../util/uuid';
 import { isUsAnySogsFromCache } from '../../session/apis/open_group_api/sogsv3/knownBlindedkeys';
 import type { RadioOptions } from '../dialog/SessionConfirm';
 import { deleteMessagesFromSwarmOnly } from '../../interactions/conversations/deleteMessagesFromSwarmOnly';
+import {
+  getUnsendMessagesObjects1o1,
+  unsendMessagesForEveryone1o1,
+} from '../../interactions/conversations/unsendMessages1o1';
+import {
+  hasGroupAdminKey,
+  unsendMessagesForEveryoneGroupV2,
+} from '../../interactions/conversations/unsendMessagesGroupV2';
 
 const deleteMessageDeviceOnly = 'deleteMessageDeviceOnly';
 const deleteMessageAllMyDevices = 'deleteMessageDevicesAll';
@@ -500,101 +502,4 @@ async function deleteOpenGroupMessages(messages: Array<MessageModel>, convo: Con
   // remove the messages we managed to remove on the server and the ones that had no serverId (i.e. failed to send)
 
   return true;
-}
-
-export async function unsendMessagesForEveryone1o1(
-  conversation: ConversationModel,
-  unsendMsgObjects: Array<UnsendMessage>
-) {
-  if (!conversation.isPrivate()) {
-    throw new Error('unsendMessagesForEveryone1o1 only works with private conversations');
-  }
-  if (unsendMsgObjects.length === 0) {
-    return;
-  }
-
-  // sending to recipient all the messages separately for now
-  await Promise.all(
-    unsendMsgObjects.map(unsendObject =>
-      MessageQueue.use()
-        .sendToPubKey(new PubKey(conversation.id), unsendObject, SnodeNamespaces.Default)
-        .catch(window?.log?.error)
-    )
-  );
-  await Promise.all(
-    unsendMsgObjects.map(unsendObject =>
-      MessageQueue.use()
-        .sendSyncMessage({ namespace: SnodeNamespaces.Default, message: unsendObject })
-        .catch(window?.log?.error)
-    )
-  );
-}
-
-async function hasGroupAdminKey(groupPk: GroupPubkeyType) {
-  const group = await UserGroupsWrapperActions.getGroup(groupPk);
-  return !!group?.secretKey?.length;
-}
-
-async function unsendMessagesForEveryoneGroupV2({
-  allMessagesFrom,
-  groupPk,
-  msgsToDelete,
-}: {
-  groupPk: GroupPubkeyType;
-  msgsToDelete: Array<MessageModel>;
-  allMessagesFrom: Array<PubkeyType>;
-}) {
-  const messageHashesToUnsend = compact(msgsToDelete.map(m => m.getMessageHash()));
-  const group = await UserGroupsWrapperActions.getGroup(groupPk);
-
-  if (!messageHashesToUnsend.length && !allMessagesFrom.length) {
-    window.log.info('unsendMessagesForEveryoneGroupV2: no hashes nor author to remove');
-    return true;
-  }
-
-  const storedAt = await MessageQueue.use().sendToGroupV2NonDurably({
-    message: new GroupUpdateDeleteMemberContentMessage({
-      createAtNetworkTimestamp: NetworkTime.now(),
-      expirationType: 'unknown', // GroupUpdateDeleteMemberContentMessage is not displayed so not expiring.
-      expireTimer: 0,
-      groupPk,
-      memberSessionIds: allMessagesFrom,
-      messageHashes: messageHashesToUnsend,
-      sodium: await getSodiumRenderer(),
-      secretKey: group?.secretKey || undefined,
-      dbMessageIdentifier: uuidV4(),
-    }),
-  });
-  return !!storedAt;
-}
-
-export function getUnsendMessagesObjects1o1(
-  conversation: ConversationModel,
-  messages: Array<MessageModel>
-) {
-  if (!conversation.isPrivate()) {
-    throw new Error(
-      'getUnsendMessagesObjects1o1: cannot send messages to a non-private conversation'
-    );
-  }
-  return compact(
-    messages.map((message, index) => {
-      const author = message.get('source');
-
-      // call getPropsForMessage here so we get the received_at or sent_at timestamp in timestamp
-      const referencedMessageTimestamp = message.getPropsForMessage().timestamp;
-      if (!referencedMessageTimestamp) {
-        window?.log?.error('cannot find timestamp - aborting unsend request');
-        return undefined;
-      }
-
-      return new UnsendMessage({
-        // this isn't pretty, but we need a unique timestamp for Android to not drop the message as a duplicate
-        createAtNetworkTimestamp: NetworkTime.now() + index,
-        referencedMessageTimestamp,
-        author,
-        dbMessageIdentifier: uuidV4(),
-      });
-    })
-  );
 }
