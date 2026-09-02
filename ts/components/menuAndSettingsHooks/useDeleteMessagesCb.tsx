@@ -21,7 +21,6 @@ import { MessageQueue } from '../../session/sending';
 
 import { deleteSogsMessageByServerIds } from '../../session/apis/open_group_api/sogsv3/sogsV3DeleteMessages';
 import { SnodeNamespaces } from '../../session/apis/snode_api/namespaces';
-import { UnsendMessage } from '../../session/messages/outgoing/controlMessage/UnsendMessage';
 import { deleteOrMarkAsDeletedMessages } from '../../interactions/conversations/deleteOrMarkAsDeletedMessages';
 import { sectionActions } from '../../state/ducks/section';
 import { ConvoHub } from '../../session/conversations';
