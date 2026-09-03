@@ -255,6 +255,9 @@ declare module 'react' {
     | 'conversation-item-mentioned-us';
 
   type SessionDataTestId =
+    // Apocentro
+    | 'location-card'
+    | 'send-location-coordinates'
     | 'group-member-status-text'
     | 'loading-spinner'
     | 'session-toast'
