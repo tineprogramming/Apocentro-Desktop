@@ -5,6 +5,7 @@ import {
   useIsKickedFromGroup,
   useIsMe,
   useIsPinned,
+  useIsPrivate,
   useIsPublic,
   useNotificationSetting,
   useWeAreAdmin,
@@ -425,17 +426,23 @@ export function InviteContactsToGroupV2Button({ conversationId }: WithConvoId) {
 /**
  * Apocentro message cleaner: the per-conversation retention policy.
  *
- * Hidden for communities (we can never clear anyone else's copy there) and for
- * Note to Self, which the sweep skips outright -- a switch that provably does
- * nothing is worse than no switch.
+ * Offered exactly where Android offers it: 1:1 chats and groups we administer.
+ * Communities, groups we don't administer and Note to Self are left out -- the
+ * sweep skips them, so a switch there would provably do nothing.
  */
 export function AutoClearButton({ conversationId }: WithConvoId) {
   const dispatch = getAppDispatch();
+  const isPrivate = useIsPrivate(conversationId);
   const isPublic = useIsPublic(conversationId);
   const isMe = useIsMe(conversationId);
+  const isGroupV2 = useIsGroupV2(conversationId);
+  const weAreAdmin = useWeAreAdmin(conversationId);
   const isKickedFromGroup = useIsKickedFromGroup(conversationId);
 
-  if (isPublic || isMe || isKickedFromGroup) {
+  const showFor1o1 = isPrivate && !isMe && !isPublic;
+  const showForAdminGroup = isGroupV2 && weAreAdmin && !isKickedFromGroup;
+
+  if (!showFor1o1 && !showForAdminGroup) {
     return null;
   }
 

@@ -16,7 +16,6 @@ import {
 } from '../../hooks/useParamSelector';
 import { ToastUtils } from '../../session/utils';
 import { PubKey } from '../../session/types';
-import { groupInfoActions } from '../../state/ducks/metaGroups';
 import type { RadioOptions } from '../dialog/SessionConfirm';
 import type { ClearScope } from '../../interactions/conversations/messageCleaner';
 
@@ -61,27 +60,7 @@ export function useClearAllMessagesCb({ conversationId }: { conversationId: stri
   const clearOthersOnly = 'clearOthersOnly';
 
   const onClickOk = async (...args: Array<any>) => {
-    if (isGroupV2AndAdmin && args[0] === clearMessagesForEveryone) {
-      // wrapping this in a Promise so the spinner is shown while the thunk is in progress
-      await new Promise<void>((resolve, reject) => {
-        dispatch(
-          groupInfoActions.triggerDeleteMsgBeforeNow({
-            groupPk: conversationId,
-            messagesWithAttachmentsOnly: false,
-            onDeleted: () => {
-              ToastUtils.pushDeleted(2);
-              onClickClose();
-              resolve();
-            },
-            onDeletionFailed: (error: string) => {
-              ToastUtils.pushToastError('clearMessagesForEveryone', error);
-              onClickClose();
-              reject();
-            },
-          }) as any
-        );
-      });
-    } else if (
+    if (
       (canClearForEveryone1o1 || isGroupV2AndAdmin) &&
       (args[0] === clearMessagesForEveryone || args[0] === clearOthersOnly)
     ) {

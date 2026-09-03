@@ -131,11 +131,16 @@ export function autoClearSummary(config: AutoClearConfig | null): string {
 /**
  * Runs the retention policy over every conversation it applies to.
  *
- * A conversation is only swept when the configured scope can actually be
- * honoured there: a remote scope needs a 1:1 or a group we administer, so a
- * "both" policy never silently turns into a local wipe of a community. Note-to-
- * Self is skipped entirely, and a conversation that throws is logged and stepped
- * over -- one bad thread must not stop the sweep.
+ * The GLOBAL policy is deliberately restricted to the conversations where a
+ * per-conversation policy can also be configured -- 1:1 chats and groups we
+ * administer -- so switching it on never silently starts wiping communities the
+ * user never opted in for. A conversation carrying its own explicit policy is
+ * always swept, whatever it is. (Matches Android's MessageCleaner.runAutoClear.)
+ *
+ * A remote scope additionally needs a conversation that can actually reach the
+ * other side, so a "both" policy never quietly degrades into a local-only wipe.
+ * Note-to-Self is skipped entirely, and a conversation that throws is logged and
+ * stepped over -- one bad thread must not stop the sweep.
  *
  * Returns how many conversations were swept.
  */
@@ -153,12 +158,17 @@ export async function runAutoClearSweep(): Promise<number> {
     }
 
     try {
-      if (config.scope !== 'device_only') {
-        // eslint-disable-next-line no-await-in-loop
-        const remotePossible = await canClearRemotely(convo.id);
-        if (!remotePossible) {
-          continue;
-        }
+      // eslint-disable-next-line no-await-in-loop
+      const remotePossible = await canClearRemotely(convo.id);
+
+      const hasOwnPolicy = getConversationAutoClear(convo.id).kind === 'on';
+      if (!hasOwnPolicy && !remotePossible) {
+        // the global policy only reaches 1:1s and groups we administer
+        continue;
+      }
+
+      if (config.scope !== 'device_only' && !remotePossible) {
+        continue;
       }
 
       // eslint-disable-next-line no-await-in-loop
