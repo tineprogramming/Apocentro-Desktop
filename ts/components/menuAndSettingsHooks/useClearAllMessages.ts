@@ -82,7 +82,7 @@ export function useClearAllMessagesCb({ conversationId }: { conversationId: stri
         );
       });
     } else if (
-      canClearForEveryone1o1 &&
+      (canClearForEveryone1o1 || isGroupV2AndAdmin) &&
       (args[0] === clearMessagesForEveryone || args[0] === clearOthersOnly)
     ) {
       const cleared = await cleanReportingFailure(
@@ -143,9 +143,12 @@ export function useClearAllMessagesCb({ conversationId }: { conversationId: stri
     inputDataTestId: 'clear-everyone-radio-option',
     labelDataTestId: 'clear-everyone-radio-option-label',
   } as const;
-  // Note: offered for 1:1 only. In a group the deletion reaches every member
-  // through a group message our own client also processes, so "others only"
-  // could not actually keep our copy -- see the PR description.
+  // Note: in a group this cannot fully keep our copy. The deletion reaches
+  // members through a GroupUpdateDeleteMemberContentMessage sent to the shared
+  // group swarm, which our own client polls and applies too (there is no
+  // self-exclusion in handleGroupUpdateDeleteMemberContentMessage, and the
+  // protocol has no way to say "everyone but the sender"). Offered anyway so the
+  // group dialog matches Android's, which has the same limitation.
   const othersOnlyItem = {
     value: clearOthersOnly,
     label: tr('clearOthersOnlyDev'),
@@ -160,7 +163,7 @@ export function useClearAllMessagesCb({ conversationId }: { conversationId: stri
       }
     : isGroupV2AndAdmin
       ? {
-          items: [deviceOnlyItem, forEveryoneItem],
+          items: [deviceOnlyItem, othersOnlyItem, forEveryoneItem],
           defaultSelectedValue: 'clearOnThisDevice',
         }
       : undefined;
