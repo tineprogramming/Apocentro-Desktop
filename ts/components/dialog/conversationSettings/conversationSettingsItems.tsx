@@ -2,7 +2,10 @@ import {
   useDisappearingMessageSettingText,
   useIsClosedGroup,
   useIsGroupV2,
+  useIsKickedFromGroup,
+  useIsMe,
   useIsPinned,
+  useIsPrivate,
   useIsPublic,
   useNotificationSetting,
   useWeAreAdmin,
@@ -21,6 +24,8 @@ import { useLocalisedNotificationOf } from '../../menuAndSettingsHooks/useLocali
 import { useShowBlockUnblock } from '../../menuAndSettingsHooks/useShowBlockUnblock';
 import { useShowDeletePrivateContactCb } from '../../menuAndSettingsHooks/useShowDeletePrivateContact';
 import { useClearAllMessagesCb } from '../../menuAndSettingsHooks/useClearAllMessages';
+import { updateAutoClearModal } from '../../../state/ducks/modalDialog';
+import { getAppDispatch } from '../../../state/dispatch';
 import { useHideNoteToSelfCb } from '../../menuAndSettingsHooks/useHideNoteToSelf';
 import { useShowDeletePrivateConversationCb } from '../../menuAndSettingsHooks/useShowDeletePrivateConversation';
 import { useShowInviteContactToCommunity } from '../../menuAndSettingsHooks/useShowInviteContactToCommunity';
@@ -414,6 +419,43 @@ export function InviteContactsToGroupV2Button({ conversationId }: WithConvoId) {
       text={{ token: 'membersInvite' }}
       onClick={showInviteContactToGroupCb}
       dataTestId="invite-contacts-menu-option"
+    />
+  );
+}
+
+/**
+ * Apocentro message cleaner: the per-conversation retention policy.
+ *
+ * Offered exactly where Android offers it: 1:1 chats and groups we administer.
+ * Communities, groups we don't administer and Note to Self are left out -- the
+ * sweep skips them, so a switch there would provably do nothing.
+ */
+export function AutoClearButton({ conversationId }: WithConvoId) {
+  const dispatch = getAppDispatch();
+  const isPrivate = useIsPrivate(conversationId);
+  const isPublic = useIsPublic(conversationId);
+  const isMe = useIsMe(conversationId);
+  const isGroupV2 = useIsGroupV2(conversationId);
+  const weAreAdmin = useWeAreAdmin(conversationId);
+  const isKickedFromGroup = useIsKickedFromGroup(conversationId);
+
+  const showFor1o1 = isPrivate && !isMe && !isPublic;
+  const showForAdminGroup = isGroupV2 && weAreAdmin && !isKickedFromGroup;
+
+  if (!showFor1o1 && !showForAdminGroup) {
+    return null;
+  }
+
+  return (
+    <PanelIconButton
+      iconElement={<PanelIconLucideIcon unicode={LUCIDE_ICONS_UNICODE.REPEAT_2} />}
+      text={{ token: 'autoClearDev' }}
+      subText={{ token: 'autoClearShortDescriptionDev' }}
+      subTextDataTestId="auto-clear-details-menu-option"
+      dataTestId="auto-clear-menu-option"
+      onClick={() => {
+        dispatch(updateAutoClearModal({ conversationId }));
+      }}
     />
   );
 }

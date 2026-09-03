@@ -18,6 +18,8 @@ import { LUCIDE_ICONS_UNICODE } from '../../../icon/lucide';
 import { MessageBubble } from './MessageBubble';
 import { MessageDeletedType } from '../../../../models/messageType';
 import { tr } from '../../../../localization';
+import { parseLocationMessage } from '../../../../util/locationMessage';
+import { LocationCard } from './LocationCard';
 
 type Props = WithMessageId;
 
@@ -66,6 +68,21 @@ export const MessageText = ({ messageId }: Props) => {
 
   if (!contents) {
     return null;
+  }
+
+  // Apocentro: a "send my location" message is a plain text message carrying a
+  // known shape, so it is recognised here and drawn as a card rather than as the
+  // raw geo:/OpenStreetMap lines. A client that doesn't know the format still
+  // shows those lines, which is the point of encoding it as text.
+  const location = parseLocationMessage(contents);
+  if (location) {
+    return (
+      <StyledMessageText dir="auto" className={clsx('module-message__text')}>
+        <MessageBubble>
+          <LocationCard location={location} />
+        </MessageBubble>
+      </StyledMessageText>
+    );
   }
 
   return (

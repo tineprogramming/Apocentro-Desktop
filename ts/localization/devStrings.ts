@@ -75,10 +75,44 @@ export const devSimpleNoArgs = {
   connectionDetailsShowDev: 'Show connection details',
   connectionDetailsHideDev: 'Hide connection details',
 
-  // Apocentro 1:1 delete conversation (device only vs for everyone)
+  // Apocentro 1:1 delete conversation (device only vs others only vs for everyone)
   deleteOnThisDeviceDev: 'Delete on this device',
+  deleteOthersOnlyDev: "Delete from other people's devices only",
   deleteConversationForEveryoneDev: 'Delete for everyone',
   deleteConversationForEveryoneFailedDev: 'Could not delete this conversation for everyone.',
+
+  // Apocentro message cleaner
+  clearOthersOnlyDev: "Clear from other people's devices only",
+  clearMessagesFailedDev: 'Could not clear those messages.',
+  messageCleanerDev: 'Message cleaner',
+  clearAllHistoryDev: 'Clear all message history',
+  clearAllHistoryDescriptionDev:
+    'Clear the messages in every conversation at once. Note to Self is left alone.',
+  clearAllHistoryConfirmDev:
+    'Are you sure you want to clear the messages in every conversation? This cannot be undone.',
+  clearedAllHistoryDev: 'Cleared every conversation.',
+  autoClearDev: 'Auto-clear messages',
+  autoClearShortDescriptionDev: 'Automatically delete messages once they reach a chosen age.',
+  autoClearSettingsDescriptionDev:
+    'Delete messages automatically once they reach a chosen age. This keeps applying for as long as it is on, not just once.',
+  autoClearUseGlobalDev: 'Use global setting',
+  autoClearOffDev: 'Off',
+  autoClearOlderThanDev: 'Delete messages older than:',
+  autoClearAmountPlaceholderDev: 'Amount',
+  autoClearAmountInvalidDev: 'Enter a whole number greater than 0',
+  autoClearHoursDev: 'Hours',
+  autoClearDaysDev: 'Days',
+
+  // Apocentro "send my location"
+  locationMyLocationDev: 'My location',
+  locationOpenInMapsDev: 'Open in maps',
+  locationFetchingDev: 'Getting your location...',
+  locationFetchFailedDev: 'Could not get your location.',
+  locationUnavailableDev: 'Location is not available on this device.',
+  locationSendFailedDev: 'Could not send your location.',
+  locationConfirmTitleDev: 'Send location?',
+  locationConfirmDescriptionDev:
+    'Your current coordinates will be sent to this conversation as a message.',
 
   // Apocentro left pane All/Unread/Unreplied filter chips
   filterAllDev: 'All',

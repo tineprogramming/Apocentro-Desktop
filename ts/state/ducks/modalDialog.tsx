@@ -148,6 +148,24 @@ export type ConversationSettingsPage =
     };
 export type ConversationSettingsModalState = (WithConvoId & ConversationSettingsPage) | null;
 
+/**
+ * Apocentro message cleaner: the auto-clear retention policy editor.
+ * `conversationId: null` edits the global policy; a conversation id edits that
+ * conversation's own policy (which may also defer to the global one).
+ */
+export type AutoClearModalState = { conversationId: string | null } | null;
+
+/**
+ * Apocentro "send my location": the confirmation shown once a fix is obtained,
+ * carrying the coordinates the user is about to share.
+ */
+export type SendLocationModalState = {
+  conversationId: string;
+  latitude: number;
+  longitude: number;
+  accuracyMeters: number | null;
+} | null;
+
 export type ModalId =
   | 'confirmModal'
   | 'inviteContactModal'
@@ -174,7 +192,9 @@ export type ModalId =
   | 'outgoingLightBoxOptions'
   | 'debugMenuModal'
   | 'keyboardShortcutsModal'
-  | 'conversationSettingsModal';
+  | 'conversationSettingsModal'
+  | 'autoClearModal'
+  | 'sendLocationModal';
 
 export type ModalState = {
   confirmModal: ConfirmModalState;
@@ -203,6 +223,8 @@ export type ModalState = {
   debugMenuModal: DebugMenuModalState;
   keyboardShortcutsModal: KeyboardShortcutsModalState;
   conversationSettingsModal: ConversationSettingsModalState;
+  autoClearModal: AutoClearModalState;
+  sendLocationModal: SendLocationModalState;
   modalStack: Array<ModalId>;
 };
 
@@ -234,6 +256,8 @@ export const initialModalState: ModalState = {
   debugMenuModal: null,
   keyboardShortcutsModal: null,
   conversationSettingsModal: null,
+  autoClearModal: null,
+  sendLocationModal: null,
 };
 
 function pushModal<T extends ModalId>(
@@ -381,6 +405,12 @@ const ModalSlice = createSlice({
     updateConversationSettingsModal(state, action: PayloadAction<ConversationSettingsModalState>) {
       return pushOrPopModal(state, 'conversationSettingsModal', action.payload);
     },
+    updateAutoClearModal(state, action: PayloadAction<AutoClearModalState>) {
+      return pushOrPopModal(state, 'autoClearModal', action.payload);
+    },
+    updateSendLocationModal(state, action: PayloadAction<SendLocationModalState>) {
+      return pushOrPopModal(state, 'sendLocationModal', action.payload);
+    },
   },
 });
 
@@ -412,5 +442,7 @@ export const {
   updateDebugMenuModal,
   updateKeyboardShortcutsMenuModal,
   updateConversationSettingsModal,
+  updateAutoClearModal,
+  updateSendLocationModal,
 } = actions;
 export const modalReducer = reducer;

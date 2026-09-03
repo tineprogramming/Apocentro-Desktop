@@ -12,8 +12,12 @@ const PERMISSIONS: Record<string, boolean> = {
   // Off by default, can be enabled by user
   media: false, // required for access to microphone, used for voice notes
 
+  // Apocentro: required by the "send my location" composition button. Only our
+  // own renderer runs in this session, and a fix is only ever taken when the
+  // user presses that button.
+  geolocation: true,
+
   // Not allowed
-  geolocation: false,
   midiSysex: false,
   openExternal: false, // we don't need this; we open links via 'will-navigate' event
   pointerLock: false,
