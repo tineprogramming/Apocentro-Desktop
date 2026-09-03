@@ -171,7 +171,7 @@ declare module 'react' {
     | 'message-info'
     | 'send-more';
 
-  type Dialog = 'invite-contacts' | 'user-settings' | 'auto-clear';
+  type Dialog = 'invite-contacts' | 'user-settings' | 'auto-clear' | 'send-location';
 
   type Buttons =
     | 'chooser-new-conversation'
@@ -183,6 +183,7 @@ declare module 'react' {
     | 'microphone'
     | 'call'
     | 'attachments'
+    | 'send-location'
     | 'set-nickname-remove'
     | 'emoji'
     | 'gif'

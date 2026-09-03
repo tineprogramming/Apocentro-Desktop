@@ -47,6 +47,27 @@ export const AddStagedAttachmentButton = ({ onClick }: CompositionButtonProps) =
   );
 };
 
+/**
+ * Apocentro "send my location". Gated on the same permission as attachments:
+ * sharing a location is sending content, so a read-only conversation must not
+ * offer it.
+ */
+export const SendLocationButton = ({ onClick }: CompositionButtonProps) => {
+  const canAddAttachments = useSelectedCanAddAttachments();
+
+  const disabled = !canAddAttachments;
+
+  return (
+    <SessionLucideIconButton
+      unicode={LUCIDE_ICONS_UNICODE.PIN}
+      onClick={onClick}
+      disabled={disabled}
+      dataTestId="send-location-button"
+      {...getSharedButtonProps(disabled)}
+    />
+  );
+};
+
 export const StartRecordingButton = ({ onClick }: CompositionButtonProps) => {
   const canAddAttachments = useSelectedCanAddAttachments();
 

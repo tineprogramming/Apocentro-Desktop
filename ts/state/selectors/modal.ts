@@ -51,6 +51,10 @@ export function useAutoClearModal() {
   return useSelector((state: StateType) => getModal(state).autoClearModal);
 }
 
+export function useSendLocationModal() {
+  return useSelector((state: StateType) => getModal(state).sendLocationModal);
+}
+
 export function useUserSettingsModal() {
   return useSelector((state: StateType) => getModal(state).userSettingsModal);
 }

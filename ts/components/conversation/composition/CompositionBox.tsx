@@ -42,6 +42,7 @@ import { SessionStagedLinkPreview } from '../SessionStagedLinkPreview';
 import { StagedAttachmentList } from '../StagedAttachmentList';
 import {
   AddStagedAttachmentButton,
+  SendLocationButton,
   SendMessageButton,
   StartRecordingButton,
   ToggleEmojiButton,
@@ -64,7 +65,11 @@ import { selectWeAreProUser } from '../../../hooks/useHasPro';
 import { closeContextMenus } from '../../../util/contextMenu';
 import type { MessageAttributes } from '../../../models/messageType';
 import { ProWrapperActions } from '../../../webworker/workers/browser/libsession_worker_interface';
-import { updateOutgoingLightBoxOptions } from '../../../state/ducks/modalDialog';
+import {
+  updateOutgoingLightBoxOptions,
+  updateSendLocationModal,
+} from '../../../state/ducks/modalDialog';
+import { tr } from '../../../localization/localeTools';
 import { isEnterKey, isEscapeKey } from '../../../util/keyboardShortcuts';
 import type { CommunityInvitation } from '../../../session/messages/outgoing/visibleMessage/VisibleMessage';
 import { SessionGifPanel } from './gif/SessionGifPanel';
@@ -458,6 +463,7 @@ class CompositionBoxInner extends Component<Props, State> {
         {typingEnabled ? (
           <ToggleGifButton onClick={this.toggleGifPanel} ref={this.showGifsButtonRef} />
         ) : null}
+        {typingEnabled ? <SendLocationButton onClick={this.onSendLocation} /> : null}
 
         <input
           className="hidden"
@@ -638,6 +644,48 @@ class CompositionBoxInner extends Component<Props, State> {
   private isTextSendable() {
     const text = this.getSendableTextFromDraft();
     return text.length > 0;
+  }
+
+  /**
+   * Apocentro "send my location": take a one-shot fix, then confirm the exact
+   * coordinates before anything is sent -- mirrors Android's showLocationSharing.
+   * The message itself is plain text (see util/locationMessage), so no protocol
+   * change is involved and other clients degrade to a map link.
+   */
+  private onSendLocation() {
+    const { selectedConversationKey } = this.props;
+    if (!selectedConversationKey) {
+      return;
+    }
+
+    if (!navigator.geolocation) {
+      ToastUtils.pushToastError('send-location', tr('locationUnavailableDev'));
+      return;
+    }
+
+    ToastUtils.pushToastInfo('send-location', tr('locationFetchingDev'));
+
+    navigator.geolocation.getCurrentPosition(
+      position => {
+        const { latitude, longitude, accuracy } = position.coords;
+        window.inboxStore?.dispatch(
+          updateSendLocationModal({
+            conversationId: selectedConversationKey,
+            latitude,
+            longitude,
+            accuracyMeters:
+              typeof accuracy === 'number' && Number.isFinite(accuracy) && accuracy > 0
+                ? Math.round(accuracy)
+                : null,
+          })
+        );
+      },
+      error => {
+        window?.log?.warn('onSendLocation: could not get a fix', error?.message);
+        ToastUtils.pushToastError('send-location', tr('locationFetchFailedDev'));
+      },
+      { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 }
+    );
   }
 
   private async onSendMessage() {

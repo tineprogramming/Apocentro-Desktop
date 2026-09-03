@@ -155,6 +155,17 @@ export type ConversationSettingsModalState = (WithConvoId & ConversationSettings
  */
 export type AutoClearModalState = { conversationId: string | null } | null;
 
+/**
+ * Apocentro "send my location": the confirmation shown once a fix is obtained,
+ * carrying the coordinates the user is about to share.
+ */
+export type SendLocationModalState = {
+  conversationId: string;
+  latitude: number;
+  longitude: number;
+  accuracyMeters: number | null;
+} | null;
+
 export type ModalId =
   | 'confirmModal'
   | 'inviteContactModal'
@@ -182,7 +193,8 @@ export type ModalId =
   | 'debugMenuModal'
   | 'keyboardShortcutsModal'
   | 'conversationSettingsModal'
-  | 'autoClearModal';
+  | 'autoClearModal'
+  | 'sendLocationModal';
 
 export type ModalState = {
   confirmModal: ConfirmModalState;
@@ -212,6 +224,7 @@ export type ModalState = {
   keyboardShortcutsModal: KeyboardShortcutsModalState;
   conversationSettingsModal: ConversationSettingsModalState;
   autoClearModal: AutoClearModalState;
+  sendLocationModal: SendLocationModalState;
   modalStack: Array<ModalId>;
 };
 
@@ -244,6 +257,7 @@ export const initialModalState: ModalState = {
   keyboardShortcutsModal: null,
   conversationSettingsModal: null,
   autoClearModal: null,
+  sendLocationModal: null,
 };
 
 function pushModal<T extends ModalId>(
@@ -394,6 +408,9 @@ const ModalSlice = createSlice({
     updateAutoClearModal(state, action: PayloadAction<AutoClearModalState>) {
       return pushOrPopModal(state, 'autoClearModal', action.payload);
     },
+    updateSendLocationModal(state, action: PayloadAction<SendLocationModalState>) {
+      return pushOrPopModal(state, 'sendLocationModal', action.payload);
+    },
   },
 });
 
@@ -426,5 +443,6 @@ export const {
   updateKeyboardShortcutsMenuModal,
   updateConversationSettingsModal,
   updateAutoClearModal,
+  updateSendLocationModal,
 } = actions;
 export const modalReducer = reducer;

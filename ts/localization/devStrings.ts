@@ -103,6 +103,17 @@ export const devSimpleNoArgs = {
   autoClearHoursDev: 'Hours',
   autoClearDaysDev: 'Days',
 
+  // Apocentro "send my location"
+  locationMyLocationDev: 'My location',
+  locationOpenInMapsDev: 'Open in maps',
+  locationFetchingDev: 'Getting your location...',
+  locationFetchFailedDev: 'Could not get your location.',
+  locationUnavailableDev: 'Location is not available on this device.',
+  locationSendFailedDev: 'Could not send your location.',
+  locationConfirmTitleDev: 'Send location?',
+  locationConfirmDescriptionDev:
+    'Your current coordinates will be sent to this conversation as a message.',
+
   // Apocentro left pane All/Unread/Unreplied filter chips
   filterAllDev: 'All',
   filterUnreadDev: 'Unread',
