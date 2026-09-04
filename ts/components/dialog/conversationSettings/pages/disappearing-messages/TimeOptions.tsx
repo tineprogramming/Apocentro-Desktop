@@ -226,7 +226,7 @@ export const TimeOptions = (props: TimerOptionsProps) => {
             onEnterPressed={() => undefined}
             placeholder={tr('customTimeDev')}
             ariaLabel="custom disappearing time amount"
-            inputDataTestId="custom-time-amount"
+            inputDataTestId="custom-time-amount-input"
             errorDataTestId="error-message"
             providedError={customValid ? undefined : tr('customTimeInvalidDev')}
             maxLength={6}
