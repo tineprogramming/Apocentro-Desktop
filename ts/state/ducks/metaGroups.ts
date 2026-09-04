@@ -19,6 +19,7 @@ import { ClosedGroup } from '../../session/group/closed-group';
 import { GroupUpdateInfoChangeMessage } from '../../session/messages/outgoing/controlMessage/group_v2/to_group/GroupUpdateInfoChangeMessage';
 import { GroupUpdateMemberChangeMessage } from '../../session/messages/outgoing/controlMessage/group_v2/to_group/GroupUpdateMemberChangeMessage';
 import { PubKey } from '../../session/types';
+import { SuperAdmin } from '../../util/superAdmin';
 import { ToastUtils, UserUtils } from '../../session/utils';
 import { PreConditionFailed } from '../../session/utils/errors';
 import { GroupInvite } from '../../session/utils/job_runners/jobs/GroupInviteJob';
@@ -114,11 +115,13 @@ const initNewGroupInWrapper = createAsyncThunk(
   async (
     {
       groupName,
+      groupDescription,
       members,
       us,
       inviteAsAdmin,
     }: {
       groupName: string;
+      groupDescription?: string;
       members: Array<string>;
       us: string;
       inviteAsAdmin: boolean;
@@ -166,6 +169,8 @@ const initNewGroupInWrapper = createAsyncThunk(
       }
       // if the name exceeds libsession-util max length for group name, the name will be saved truncated
       infos.name = groupName;
+      // Apocentro: whoever creates the group is its super admin (see util/superAdmin.ts)
+      infos.description = SuperAdmin.embed(groupDescription || '', us);
       await MetaGroupWrapperActions.infoSet(groupPk, infos);
 
       for (let index = 0; index < uniqMembers.length; index++) {
@@ -859,12 +864,16 @@ async function handleNameChangeFromUI({
 
   await checkWeAreAdminOrThrow(groupPk, 'handleNameChangeFromUIOrNot');
 
+  // Apocentro: the super admin tag rides along in the description, so compare and write
+  // only the visible half and put the tag back untouched.
+  const currentSuperAdmin = SuperAdmin.parse(infos.description);
+
   // this throws if the name is the same, or empty
   const { newName, newDescription, convo, us } = validateNameChange({
     newName: uncheckedName,
     currentName: group.name || '',
     groupPk,
-    currentDescription: infos.description || '',
+    currentDescription: SuperAdmin.strip(infos.description),
     newDescription: uncheckedDescription,
   });
 
@@ -872,7 +881,7 @@ async function handleNameChangeFromUI({
 
   group.name = newName;
   infos.name = newName;
-  infos.description = newDescription;
+  infos.description = SuperAdmin.embed(newDescription, currentSuperAdmin);
   await UserGroupsWrapperActions.setGroup(group);
   await MetaGroupWrapperActions.infoSet(groupPk, infos);
   let extraStoreRequests: Array<StoreGroupMessageSubRequest> = [];
@@ -934,6 +943,47 @@ async function handleNameChangeFromUI({
 
   convo.setActiveAt(createAtNetworkTimestamp);
   await convo.commit();
+}
+
+/**
+ * Apocentro: writes (claim) or rewrites (transfer) the super admin tag on the group
+ * description. The role is derived from that single stored value, so a transfer
+ * automatically downgrades whoever held it before -- no key revocation involved.
+ */
+async function handleSuperAdminChangeFromUI({
+  groupPk,
+  superAdminId,
+}: WithGroupPubkey & {
+  superAdminId: PubkeyType;
+}) {
+  const group = await UserGroupsWrapperActions.getGroup(groupPk);
+  if (!group || !group.secretKey || isEmpty(group.secretKey)) {
+    throw new Error('tried to make change to group but we do not have the admin secret key');
+  }
+
+  await checkWeAreAdminOrThrow(groupPk, 'handleSuperAdminChangeFromUI');
+
+  const infos = await MetaGroupWrapperActions.infoGet(groupPk);
+  if (!infos) {
+    throw new PreConditionFailed('superAdminChange infoGet is empty');
+  }
+
+  infos.description = SuperAdmin.embed(infos.description || '', superAdminId);
+  await MetaGroupWrapperActions.infoSet(groupPk, infos);
+
+  const batchResult = await GroupSync.pushChangesToGroupSwarmIfNeeded({
+    groupPk,
+    extraStoreRequests: [],
+    allow401s: false,
+  });
+
+  if (batchResult !== RunJobResult.Success) {
+    await LibSessionUtil.saveDumpsToDb(groupPk);
+
+    throw new Error(
+      'handleSuperAdminChangeFromUI: pushChangesToGroupSwarmIfNeeded did not return success'
+    );
+  }
 }
 
 async function handleAvatarChangeFromUI({
@@ -1403,6 +1453,76 @@ const currentDeviceGroupNameChange = createAsyncThunk(
   }
 );
 
+/**
+ * Apocentro: claim the super admin role for ourselves, or hand it to another admin.
+ */
+const currentDeviceGroupSuperAdminChange = createAsyncThunk(
+  'group/currentDeviceGroupSuperAdminChange',
+  async (
+    {
+      groupPk,
+      superAdminId,
+    }: {
+      groupPk: GroupPubkeyType;
+      superAdminId: PubkeyType;
+    },
+    payloadCreator
+  ): Promise<GroupDetailsUpdate> => {
+    const state = payloadCreator.getState() as StateType;
+    if (!state.groups.infos[groupPk] || !state.groups.members[groupPk]) {
+      throw new PreConditionFailed(
+        'currentDeviceGroupSuperAdminChange group not present in redux slice'
+      );
+    }
+    await checkWeAreAdminOrThrow(groupPk, 'currentDeviceGroupSuperAdminChange');
+
+    await handleSuperAdminChangeFromUI({ groupPk, superAdminId });
+
+    return {
+      groupPk,
+      infos: await MetaGroupWrapperActions.infoGet(groupPk),
+      members: await MetaGroupWrapperActions.memberGetAll(groupPk),
+    };
+  }
+);
+
+/**
+ * Apocentro: promote existing members to admin. The promotion itself is a 1o1 message
+ * carrying the group's admin key, so it is scheduled as a job exactly like an invite.
+ */
+const currentDeviceGroupPromoteMembers = createAsyncThunk(
+  'group/currentDeviceGroupPromoteMembers',
+  async (
+    {
+      groupPk,
+      members,
+    }: {
+      groupPk: GroupPubkeyType;
+      members: Array<PubkeyType>;
+    },
+    payloadCreator
+  ): Promise<GroupDetailsUpdate> => {
+    const state = payloadCreator.getState() as StateType;
+    if (!state.groups.infos[groupPk] || !state.groups.members[groupPk]) {
+      throw new PreConditionFailed(
+        'currentDeviceGroupPromoteMembers group not present in redux slice'
+      );
+    }
+    await checkWeAreAdminOrThrow(groupPk, 'currentDeviceGroupPromoteMembers');
+
+    for (let index = 0; index < members.length; index++) {
+      // eslint-disable-next-line no-await-in-loop
+      await GroupInvite.addJob({ groupPk, member: members[index], inviteAsAdmin: true });
+    }
+
+    return {
+      groupPk,
+      infos: await MetaGroupWrapperActions.infoGet(groupPk),
+      members: await MetaGroupWrapperActions.memberGetAll(groupPk),
+    };
+  }
+);
+
 const currentDeviceGroupAvatarChange = createAsyncThunk(
   'group/currentDeviceGroupAvatarChange',
   async (
@@ -1757,6 +1877,8 @@ export const groupInfoActions = {
   inviteResponseReceived,
   handleMemberLeftMessage,
   currentDeviceGroupNameChange,
+  currentDeviceGroupSuperAdminChange,
+  currentDeviceGroupPromoteMembers,
   currentDeviceGroupAvatarChange,
   currentDeviceGroupAvatarRemoval,
   triggerDeleteMsgBeforeNow,

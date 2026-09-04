@@ -156,6 +156,11 @@ export type ConversationSettingsModalState = (WithConvoId & ConversationSettings
 export type AutoClearModalState = { conversationId: string | null } | null;
 
 /**
+ * Apocentro group super admin: the "Manage admins" screen for a 03 group.
+ */
+export type ManageGroupAdminsModalState = { conversationId: string } | null;
+
+/**
  * Apocentro "send my location": the confirmation shown once a fix is obtained,
  * carrying the coordinates the user is about to share.
  */
@@ -194,6 +199,7 @@ export type ModalId =
   | 'keyboardShortcutsModal'
   | 'conversationSettingsModal'
   | 'autoClearModal'
+  | 'manageGroupAdminsModal'
   | 'sendLocationModal';
 
 export type ModalState = {
@@ -224,6 +230,7 @@ export type ModalState = {
   keyboardShortcutsModal: KeyboardShortcutsModalState;
   conversationSettingsModal: ConversationSettingsModalState;
   autoClearModal: AutoClearModalState;
+  manageGroupAdminsModal: ManageGroupAdminsModalState;
   sendLocationModal: SendLocationModalState;
   modalStack: Array<ModalId>;
 };
@@ -257,6 +264,7 @@ export const initialModalState: ModalState = {
   keyboardShortcutsModal: null,
   conversationSettingsModal: null,
   autoClearModal: null,
+  manageGroupAdminsModal: null,
   sendLocationModal: null,
 };
 
@@ -408,6 +416,9 @@ const ModalSlice = createSlice({
     updateAutoClearModal(state, action: PayloadAction<AutoClearModalState>) {
       return pushOrPopModal(state, 'autoClearModal', action.payload);
     },
+    updateManageGroupAdminsModal(state, action: PayloadAction<ManageGroupAdminsModalState>) {
+      return pushOrPopModal(state, 'manageGroupAdminsModal', action.payload);
+    },
     updateSendLocationModal(state, action: PayloadAction<SendLocationModalState>) {
       return pushOrPopModal(state, 'sendLocationModal', action.payload);
     },
@@ -443,6 +454,7 @@ export const {
   updateKeyboardShortcutsMenuModal,
   updateConversationSettingsModal,
   updateAutoClearModal,
+  updateManageGroupAdminsModal,
   updateSendLocationModal,
 } = actions;
 export const modalReducer = reducer;

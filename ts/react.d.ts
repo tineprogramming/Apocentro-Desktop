@@ -27,7 +27,8 @@ declare module 'react' {
     | 'time-option-12-hours'
     | 'time-option-1-days'
     | 'time-option-7-days'
-    | 'time-option-14-days';
+    | 'time-option-14-days'
+    | 'time-option-custom';
 
   type MenuOption =
     | 'attachments'
@@ -37,6 +38,7 @@ declare module 'react' {
     | 'invite-contacts'
     | 'clear-all-messages'
     | 'auto-clear'
+    | 'manage-admins'
     | 'copy-account-id'
     | 'delete-conversation'
     | 'delete-contact'
@@ -160,7 +162,8 @@ declare module 'react' {
     | 'add-admins'
     | 'ban-user'
     | 'unban-user'
-    | 'auto-clear-amount';
+    | 'auto-clear-amount'
+    | 'custom-time-amount';
 
   type ProBadges =
     | 'edit-profile-picture'
@@ -171,7 +174,12 @@ declare module 'react' {
     | 'message-info'
     | 'send-more';
 
-  type Dialog = 'invite-contacts' | 'user-settings' | 'auto-clear' | 'send-location';
+  type Dialog =
+    | 'invite-contacts'
+    | 'user-settings'
+    | 'auto-clear'
+    | 'send-location'
+    | 'manage-group-admins';
 
   type Buttons =
     | 'chooser-new-conversation'
@@ -244,7 +252,10 @@ declare module 'react' {
     | 'auto-clear-others_only'
     | 'auto-clear-both'
     | 'auto-clear-hours'
-    | 'auto-clear-days';
+    | 'auto-clear-days'
+    | 'custom-time-minutes'
+    | 'custom-time-hours'
+    | 'custom-time-days';
 
   type ConversationItemFlagsIds =
     | 'conversation-item-muted'
@@ -256,6 +267,11 @@ declare module 'react' {
 
   type SessionDataTestId =
     // Apocentro
+    | 'super-admin-label'
+    | 'promote-to-admin-button'
+    | 'claim-super-admin-button'
+    | 'transfer-super-admin-button'
+    | 'kick-admin-button'
     | 'location-card'
     | 'send-location-coordinates'
     | 'group-member-status-text'

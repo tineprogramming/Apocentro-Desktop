@@ -4,6 +4,11 @@ import styled from 'styled-components';
 import { getAppDispatch } from '../../../../../state/dispatch';
 import { setDisappearingMessagesByConvoId } from '../../../../../interactions/conversationInteractions';
 import { TimerOptions } from '../../../../../session/disappearing_messages/timerOptions';
+import {
+  customDurationSeconds,
+  splitIntoCustomTime,
+  type CustomTimeUnit,
+} from '../../../../../session/disappearing_messages/customTimer';
 import { DisappearingMessageConversationModeType } from '../../../../../session/disappearing_messages/types';
 
 import {
@@ -71,6 +76,26 @@ function loadDefaultTimeValue(
     : 0;
 }
 
+/**
+ * Apocentro: a timer that is not one of the values Session knows about was set from a
+ * custom entry (here, or on another platform), so reopen the page with the custom row
+ * filled in rather than with nothing selected.
+ */
+function initialCustomTimeState(expireTimer?: number): {
+  selected: boolean;
+  amount: string;
+  unit: CustomTimeUnit;
+} {
+  const knownValues: ReadonlyArray<number> = TimerOptions.VALUES;
+  const isCustom = !!expireTimer && expireTimer > 0 && !knownValues.includes(expireTimer);
+
+  if (!isCustom) {
+    return { selected: false, amount: '1', unit: 'hours' };
+  }
+  const { amount, unit } = splitIntoCustomTime(expireTimer);
+  return { selected: true, amount: String(amount), unit };
+}
+
 /** if there is only one disappearing message mode and 'off' enabled then we trigger single mode UI */
 function useSingleMode(disappearingModeOptions: Record<string, boolean> | undefined) {
   const singleMode: DisappearingMessageConversationModeType | undefined =
@@ -124,6 +149,11 @@ function useDisappearingMessagesForConversationStateInternal(
   const [timeSelected, setTimeSelected] = useState(expireTimer || 0);
   const [loading, setLoading] = useState(false);
 
+  const initialCustom = initialCustomTimeState(expireTimer);
+  const [customSelected, setCustomSelected] = useState(initialCustom.selected);
+  const [customAmount, setCustomAmount] = useState(initialCustom.amount);
+  const [customUnit, setCustomUnit] = useState<CustomTimeUnit>(initialCustom.unit);
+
   return {
     modeSelected,
     setModeSelected,
@@ -131,6 +161,12 @@ function useDisappearingMessagesForConversationStateInternal(
     setTimeSelected,
     loading,
     setLoading,
+    customSelected,
+    setCustomSelected,
+    customAmount,
+    setCustomAmount,
+    customUnit,
+    setCustomUnit,
   };
 }
 
@@ -139,15 +175,23 @@ function useHandleExpirationTimeChange(
   setTimeSelected: Dispatch<number>,
   modeSelected: DisappearingMessageConversationModeType,
   hasOnlyOneMode: boolean,
+  customSelected: boolean,
   expireTimer?: number
 ) {
   useEffect(() => {
+    // Apocentro: a custom time is driven by its own inputs, don't stomp on it
+    if (customSelected) {
+      return;
+    }
     // NOTE loads a time value from the conversation model or the default
     setTimeSelected(
       expireTimer !== undefined && expireTimer > -1
         ? expireTimer
         : loadDefaultTimeValue(modeSelected, hasOnlyOneMode)
     );
+    // NOTE customSelected is read but deliberately not a dependency: re-running this when
+    // the user leaves the custom row would immediately overwrite the preset they just picked.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [expireTimer, hasOnlyOneMode, modeSelected, setTimeSelected]);
 }
 
@@ -188,11 +232,54 @@ export const DisappearingMessagesForConversationModal = (props: ConversationSett
   const { singleMode } = useSingleMode(disappearingModeOptions);
   const hasOnlyOneMode = !!(singleMode && singleMode.length > 0);
 
-  const { modeSelected, setModeSelected, timeSelected, setTimeSelected, loading, setLoading } =
-    useDisappearingMessagesForConversationStateInternal(
-      hasOnlyOneMode ? singleMode : expirationMode,
-      expireTimer
-    );
+  const {
+    modeSelected,
+    setModeSelected,
+    timeSelected,
+    setTimeSelected,
+    loading,
+    setLoading,
+    customSelected,
+    setCustomSelected,
+    customAmount,
+    setCustomAmount,
+    customUnit,
+    setCustomUnit,
+  } = useDisappearingMessagesForConversationStateInternal(
+    hasOnlyOneMode ? singleMode : expirationMode,
+    expireTimer
+  );
+
+  const customInvalid = customSelected && customDurationSeconds(customAmount, customUnit) === null;
+
+  // the custom inputs are the source of truth for the timer while the custom row is picked
+  function applyCustom(amount: string, unit: CustomTimeUnit) {
+    const seconds = customDurationSeconds(amount, unit);
+    if (seconds !== null) {
+      setTimeSelected(seconds);
+    }
+  }
+
+  function onCustomSelected() {
+    setCustomSelected(true);
+    applyCustom(customAmount, customUnit);
+  }
+
+  function onCustomAmountChanged(value: string) {
+    const digitsOnly = value.replace(/[^0-9]/g, '').slice(0, 6);
+    setCustomAmount(digitsOnly);
+    applyCustom(digitsOnly, customUnit);
+  }
+
+  function onCustomUnitChanged(unit: CustomTimeUnit) {
+    setCustomUnit(unit);
+    applyCustom(customAmount, unit);
+  }
+
+  function onPresetSelected(value: number) {
+    setCustomSelected(false);
+    setTimeSelected(value);
+  }
 
   function closeOrBackInPage() {
     if (isStandalone) {
@@ -242,7 +329,13 @@ export const DisappearingMessagesForConversationModal = (props: ConversationSett
     }
   };
 
-  useHandleExpirationTimeChange(setTimeSelected, modeSelected, hasOnlyOneMode, expireTimer);
+  useHandleExpirationTimeChange(
+    setTimeSelected,
+    modeSelected,
+    hasOnlyOneMode,
+    customSelected,
+    expireTimer
+  );
 
   if (!disappearingModeOptions) {
     return null;
@@ -277,11 +370,12 @@ export const DisappearingMessagesForConversationModal = (props: ConversationSett
               onClick={handleSetMode}
               buttonType={SessionButtonType.Outline}
               disabled={
-                singleMode
+                customInvalid ||
+                (singleMode
                   ? disappearingModeOptions[singleMode]
                   : modeSelected
                     ? disappearingModeOptions[modeSelected]
-                    : undefined
+                    : undefined)
               }
               dataTestId={'disappear-set-button'}
             >
@@ -305,8 +399,14 @@ export const DisappearingMessagesForConversationModal = (props: ConversationSett
               <TimeOptions
                 modeSelected={modeSelected}
                 selected={timeSelected}
-                setSelected={setTimeSelected}
+                setSelected={onPresetSelected}
                 hasOnlyOneMode={hasOnlyOneMode}
+                customSelected={customSelected}
+                customAmount={customAmount}
+                customUnit={customUnit}
+                onCustomSelected={onCustomSelected}
+                onCustomAmountChanged={onCustomAmountChanged}
+                onCustomUnitChanged={onCustomUnitChanged}
                 disabled={
                   singleMode
                     ? disappearingModeOptions[singleMode]

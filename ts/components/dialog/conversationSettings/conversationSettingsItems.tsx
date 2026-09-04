@@ -24,7 +24,7 @@ import { useLocalisedNotificationOf } from '../../menuAndSettingsHooks/useLocali
 import { useShowBlockUnblock } from '../../menuAndSettingsHooks/useShowBlockUnblock';
 import { useShowDeletePrivateContactCb } from '../../menuAndSettingsHooks/useShowDeletePrivateContact';
 import { useClearAllMessagesCb } from '../../menuAndSettingsHooks/useClearAllMessages';
-import { updateAutoClearModal } from '../../../state/ducks/modalDialog';
+import { updateAutoClearModal, updateManageGroupAdminsModal } from '../../../state/ducks/modalDialog';
 import { getAppDispatch } from '../../../state/dispatch';
 import { useHideNoteToSelfCb } from '../../menuAndSettingsHooks/useHideNoteToSelf';
 import { useShowDeletePrivateConversationCb } from '../../menuAndSettingsHooks/useShowDeletePrivateConversation';
@@ -419,6 +419,34 @@ export function InviteContactsToGroupV2Button({ conversationId }: WithConvoId) {
       text={{ token: 'membersInvite' }}
       onClick={showInviteContactToGroupCb}
       dataTestId="invite-contacts-menu-option"
+    />
+  );
+}
+
+/**
+ * Apocentro group super admin: the "Manage admins" screen.
+ *
+ * Offered to every admin of a 03 group -- a plain admin still needs it to promote
+ * members, and (in a group with no super admin yet) to claim the role.
+ */
+export function ManageAdminsButton({ conversationId }: WithConvoId) {
+  const dispatch = getAppDispatch();
+  const isGroupV2 = useIsGroupV2(conversationId);
+  const weAreAdmin = useWeAreAdmin(conversationId);
+  const isKickedFromGroup = useIsKickedFromGroup(conversationId);
+
+  if (!isGroupV2 || !weAreAdmin || isKickedFromGroup) {
+    return null;
+  }
+
+  return (
+    <PanelIconButton
+      iconElement={<PanelIconLucideIcon unicode={LUCIDE_ICONS_UNICODE.USER_ROUND_CHECK} />}
+      text={{ token: 'manageAdminsDev' }}
+      onClick={() => {
+        dispatch(updateManageGroupAdminsModal({ conversationId }));
+      }}
+      dataTestId="manage-admins-menu-option"
     />
   );
 }

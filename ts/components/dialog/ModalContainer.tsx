@@ -7,6 +7,7 @@ import {
   useUpdateConversationDetailsModal,
   useUserProfileModal,
   useAutoClearModal,
+  useManageGroupAdminsModal,
   useSendLocationModal,
   useChangeNickNameDialog,
   useUserSettingsModal,
@@ -42,6 +43,7 @@ import { ReactClearAllModal } from './ReactClearAllModal';
 import { ReactListModal } from './ReactListModal';
 import { SessionNicknameDialog } from './SessionNicknameDialog';
 import { AutoClearDialog } from './AutoClearDialog';
+import { ManageGroupAdminsDialog } from './ManageGroupAdminsDialog';
 import { SendLocationDialog } from './SendLocationDialog';
 import { UpdateGroupMembersDialog } from './UpdateGroupMembersDialog';
 import { UpdateConversationDetailsDialog } from './UpdateConversationDetailsDialog';
@@ -67,6 +69,7 @@ export const ModalContainer = () => {
   const userProfileModalState = useUserProfileModal();
   const changeNicknameModal = useChangeNickNameDialog();
   const autoClearModal = useAutoClearModal();
+  const manageGroupAdminsModal = useManageGroupAdminsModal();
   const sendLocationModal = useSendLocationModal();
   const userSettingsModalState = useUserSettingsModal();
   const onionPathModalState = useOnionPathDialog();
@@ -114,6 +117,7 @@ export const ModalContainer = () => {
       )}
       {changeNicknameModal && <SessionNicknameDialog {...changeNicknameModal} />}
       {autoClearModal && <AutoClearDialog {...autoClearModal} />}
+      {manageGroupAdminsModal && <ManageGroupAdminsDialog {...manageGroupAdminsModal} />}
       {sendLocationModal && <SendLocationDialog {...sendLocationModal} />}
       {enterPasswordModalState && <EnterPasswordModal {...enterPasswordModalState} />}
       {deleteAccountModalState && <DeleteAccountModal {...deleteAccountModalState} />}
