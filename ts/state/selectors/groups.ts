@@ -204,12 +204,15 @@ export function useLibGroupSuperAdmin(convoId?: string): string | null {
   return useSelector((state: StateType) => selectLibGroupSuperAdmin(state, convoId));
 }
 
+// NOTE: [react-compiler] this convinces the compiler the hook is static
+const useWeAreAdminInternal = useWeAreAdmin;
+
 /**
  * Whether we may remove members: the super admin, or any admin of a legacy group.
  * Mirrors `SuperAdminManager.mayRemoveMembers` on Android.
  */
 export function useWeMayRemoveMembers(convoId?: string): boolean {
-  const weAreAdmin = useWeAreAdmin(convoId);
+  const weAreAdmin = useWeAreAdminInternal(convoId);
   const superAdmin = useLibGroupSuperAdmin(convoId);
 
   if (!weAreAdmin) {
