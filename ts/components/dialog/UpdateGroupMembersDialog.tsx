@@ -23,6 +23,7 @@ import { groupInfoActions } from '../../state/ducks/metaGroups';
 import {
   useMemberGroupChangePending,
   useStateOf03GroupMembers,
+  useWeMayRemoveMembers,
 } from '../../state/selectors/groups';
 import { useSelectedIsGroupV2 } from '../../state/selectors/selectedConversation';
 import { SessionSpinner } from '../loading';
@@ -77,12 +78,13 @@ const useFilteredSortedListOfMembers = (convoId: string) => {
 
 // NOTE: [react-compiler] this has to live here for the hook to be identified as static
 function useMembersListDetailsInternal(conversationId: string) {
-  const weAreAdmin = useWeAreAdmin(conversationId);
+  // Apocentro: only the super admin may remove members once a group has one
+  const mayRemoveMembers = useWeMayRemoveMembers(conversationId);
   const isV2Group = useSelectedIsGroupV2();
   const groupAdmins = useGroupAdmins(conversationId);
 
   return {
-    weAreAdmin,
+    mayRemoveMembers,
     isV2Group,
     groupAdmins,
   };
@@ -95,17 +97,17 @@ const MemberList = (props: {
   onUnselect: (m: string) => void;
 }) => {
   const { onSelect, convoId, onUnselect, selectedMembers } = props;
-  const { weAreAdmin, isV2Group, groupAdmins } = useMembersListDetailsInternal(convoId);
+  const { mayRemoveMembers, isV2Group, groupAdmins } = useMembersListDetailsInternal(convoId);
 
   const sortedMembers = useFilteredSortedListOfMembers(convoId);
 
   return (
     <>
       {sortedMembers.map(member => {
-        const isSelected = (weAreAdmin && selectedMembers.includes(member)) || false;
+        const isSelected = (mayRemoveMembers && selectedMembers.includes(member)) || false;
         const memberIsAdmin = groupAdmins?.includes(member);
         // we want to hide the toggle for admins are they are not selectable
-        const showRadioButton = !memberIsAdmin && weAreAdmin;
+        const showRadioButton = !memberIsAdmin && mayRemoveMembers;
 
         return (
           <MemberListItem
@@ -132,6 +134,7 @@ export const UpdateGroupMembersDialog = (props: Props) => {
   const isPrivate = useIsPrivate(conversationId);
   const isPublic = useIsPublic(conversationId);
   const weAreAdmin = useWeAreAdmin(conversationId);
+  const mayRemoveMembers = useWeMayRemoveMembers(conversationId);
   const existingMembers = useSortedGroupMembers(conversationId) || [];
   const groupAdmins = useGroupAdmins(conversationId);
   const isProcessingUIChange = useMemberGroupChangePending();
@@ -171,8 +174,8 @@ export const UpdateGroupMembersDialog = (props: Props) => {
   };
 
   const onSelect = (member: string) => {
-    if (!weAreAdmin) {
-      window?.log?.warn('Only group admin can select!');
+    if (!mayRemoveMembers) {
+      window?.log?.warn('Only the group super admin can select members to remove!');
       return;
     }
 
@@ -187,7 +190,7 @@ export const UpdateGroupMembersDialog = (props: Props) => {
   };
 
   const onUnselect = (member: string) => {
-    if (!weAreAdmin) {
+    if (!mayRemoveMembers) {
       window?.log?.warn('Only group admin can unselect members!');
       return;
     }
@@ -206,7 +209,7 @@ export const UpdateGroupMembersDialog = (props: Props) => {
       $contentMaxWidth={WrapperModalWidth.wide}
       buttonChildren={
         <ModalActionsContainer buttonType={SessionButtonType.Simple}>
-          {weAreAdmin && (
+          {mayRemoveMembers && (
             <SessionButton
               text={tr('remove')}
               onClick={onClickOK}

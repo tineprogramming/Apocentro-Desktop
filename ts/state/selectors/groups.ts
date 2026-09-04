@@ -9,6 +9,7 @@ import { type GroupMemberGetRedux } from '../ducks/types/groupReduxTypes';
 import { StateType } from '../reducer';
 import { assertUnreachable } from '../../types/sqlSharedTypes';
 import { UserUtils } from '../../session/utils';
+import { SuperAdmin } from '../../util/superAdmin';
 import {
   useConversationsNicknameRealNameOrShortenPubkey,
   useWeAreAdmin,
@@ -178,11 +179,44 @@ function selectLibGroupDescription(state: StateType, convo?: string): string {
   }
 
   const description = selectLibGroupsState(state).infos[convo]?.description;
-  return description ?? '';
+  // Apocentro: the super admin tag lives at the end of the description, never show it
+  return SuperAdmin.strip(description);
 }
 
 export function useLibGroupDescription(convoId?: string): string {
   return useSelector((state: StateType) => selectLibGroupDescription(state, convoId));
+}
+
+/**
+ * Apocentro: the account id of the group's super admin, or null for a legacy group
+ * (created before this feature, or by a client that doesn't write the tag) where every
+ * admin keeps the full set of admin powers.
+ */
+function selectLibGroupSuperAdmin(state: StateType, convo?: string): string | null {
+  if (!convo || !PubKey.is03Pubkey(convo)) {
+    return null;
+  }
+
+  return SuperAdmin.parse(selectLibGroupsState(state).infos[convo]?.description);
+}
+
+export function useLibGroupSuperAdmin(convoId?: string): string | null {
+  return useSelector((state: StateType) => selectLibGroupSuperAdmin(state, convoId));
+}
+
+/**
+ * Whether we may remove members: the super admin, or any admin of a legacy group.
+ * Mirrors `SuperAdminManager.mayRemoveMembers` on Android.
+ */
+export function useWeMayRemoveMembers(convoId?: string): boolean {
+  const weAreAdmin = useWeAreAdmin(convoId);
+  const superAdmin = useLibGroupSuperAdmin(convoId);
+
+  if (!weAreAdmin) {
+    return false;
+  }
+
+  return !superAdmin || superAdmin === UserUtils.getOurPubKeyStrFromCache();
 }
 
 export function useLibGroupMembers(convoId?: string): Array<PubkeyType> {

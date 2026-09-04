@@ -17,6 +17,7 @@ import { ConversationSettingsHeader } from '../../conversationSettingsHeader';
 import {
   PinUnpinButton,
   NotificationPanelButton,
+  ManageAdminsButton,
   UpdateGroupMembersButton,
   AttachmentsButton,
   UpdateDisappearingMessagesButton,
@@ -67,6 +68,7 @@ function GroupV2AdminActions({ conversationId }: WithConvoId) {
       <PanelButtonGroup>
         <InviteContactsToGroupV2Button conversationId={conversationId} />
         <UpdateGroupMembersButton conversationId={conversationId} asAdmin={true} />
+        <ManageAdminsButton conversationId={conversationId} />
         <UpdateDisappearingMessagesButton conversationId={conversationId} asAdmin={true} />
       </PanelButtonGroup>
     </>

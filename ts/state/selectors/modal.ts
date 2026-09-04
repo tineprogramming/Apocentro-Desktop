@@ -51,6 +51,10 @@ export function useAutoClearModal() {
   return useSelector((state: StateType) => getModal(state).autoClearModal);
 }
 
+export function useManageGroupAdminsModal() {
+  return useSelector((state: StateType) => getModal(state).manageGroupAdminsModal);
+}
+
 export function useSendLocationModal() {
   return useSelector((state: StateType) => getModal(state).sendLocationModal);
 }

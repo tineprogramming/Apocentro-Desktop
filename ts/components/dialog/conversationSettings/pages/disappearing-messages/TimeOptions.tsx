@@ -1,5 +1,6 @@
 import type { DisappearingMessageConversationModeType } from 'libsession_util_nodejs';
 import { isEmpty } from 'lodash';
+import styled from 'styled-components';
 
 import { DisappearTimeOptionDataTestId } from 'react';
 import {
@@ -7,11 +8,19 @@ import {
   TimerSeconds,
 } from '../../../../../session/disappearing_messages/timerOptions';
 import {
+  CUSTOM_TIME_UNITS,
+  customDurationSeconds,
+  type CustomTimeUnit,
+} from '../../../../../session/disappearing_messages/customTimer';
+import {
   PanelButtonGroup,
   PanelButtonText,
+  PanelButtonTextWithSubText,
   PanelLabelWithDescription,
 } from '../../../../buttons/panel/PanelButton';
 import { PanelRadioButton } from '../../../../buttons/panel/PanelRadioButton';
+import { SessionRadioGroup } from '../../../../basic/SessionRadioGroup';
+import { ModalSimpleSessionInput } from '../../../../inputs/SessionInput';
 import { assertUnreachable } from '../../../../../types/sqlSharedTypes';
 import { tr } from '../../../../../localization/localeTools';
 
@@ -25,7 +34,34 @@ type TimerOptionsProps = {
   setSelected: (value: number) => void;
   hasOnlyOneMode?: boolean;
   disabled?: boolean;
+  // Apocentro: the free-input "Custom time" row shown under the presets
+  customSelected: boolean;
+  customAmount: string;
+  customUnit: CustomTimeUnit;
+  onCustomSelected: () => void;
+  onCustomAmountChanged: (value: string) => void;
+  onCustomUnitChanged: (unit: CustomTimeUnit) => void;
 };
+
+const StyledCustomTimeInputs = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: var(--margins-sm);
+  padding: var(--margins-sm) var(--margins-lg);
+  width: 100%;
+`;
+
+function unitLabel(unit: CustomTimeUnit) {
+  switch (unit) {
+    case 'minutes':
+      return tr('timeUnitMinutesDev');
+    case 'hours':
+      return tr('timeUnitHoursDev');
+    case 'days':
+    default:
+      return tr('timeUnitDaysDev');
+  }
+}
 
 function useTimerOptionsByMode(
   disappearingMessageMode: DisappearingMessageConversationModeType,
@@ -112,9 +148,22 @@ function getDataTestIdFromTimerSeconds(seconds: TimerSeconds): DisappearTimeOpti
 }
 
 export const TimeOptions = (props: TimerOptionsProps) => {
-  const { modeSelected, selected, setSelected, hasOnlyOneMode, disabled } = props;
+  const {
+    modeSelected,
+    selected,
+    setSelected,
+    hasOnlyOneMode,
+    disabled,
+    customSelected,
+    customAmount,
+    customUnit,
+    onCustomSelected,
+    onCustomAmountChanged,
+    onCustomUnitChanged,
+  } = props;
 
   const options = useTimerOptionsByMode(modeSelected, hasOnlyOneMode ?? false);
+  const customValid = customDurationSeconds(customAmount, customUnit) !== null;
 
   if (!options || isEmpty(options)) {
     return null;
@@ -140,7 +189,7 @@ export const TimeOptions = (props: TimerOptionsProps) => {
                 />
               }
               value={option.value}
-              isSelected={selected === option.value}
+              isSelected={!customSelected && selected === option.value}
               onSelect={() => {
                 setSelected(option.value);
               }}
@@ -150,7 +199,53 @@ export const TimeOptions = (props: TimerOptionsProps) => {
             />
           );
         })}
+        {/* Apocentro: any duration, not just the four presets above */}
+        <PanelRadioButton
+          key="time-option-custom"
+          textElement={
+            <PanelButtonTextWithSubText
+              text={{ token: 'customTimeDev' }}
+              subText={{ token: 'customTimeDescriptionDev' }}
+              textDataTestId="disappearing-messages-menu-option"
+              subTextDataTestId="disappearing-messages-timer-menu-option"
+            />
+          }
+          value="custom"
+          isSelected={customSelected}
+          onSelect={onCustomSelected}
+          disabled={disabled}
+          rowDataTestId="time-option-custom"
+          radioInputDataTestId="input-time-option-custom"
+        />
       </PanelButtonGroup>
+      {customSelected ? (
+        <StyledCustomTimeInputs>
+          <ModalSimpleSessionInput
+            value={customAmount}
+            onValueChanged={onCustomAmountChanged}
+            onEnterPressed={() => undefined}
+            placeholder={tr('customTimeDev')}
+            ariaLabel="custom disappearing time amount"
+            inputDataTestId="custom-time-amount"
+            errorDataTestId="error-message"
+            providedError={customValid ? undefined : tr('customTimeInvalidDev')}
+            maxLength={6}
+            disabled={disabled}
+          />
+          <SessionRadioGroup
+            group="disappear_custom_unit"
+            initialItem={customUnit}
+            onClick={value => onCustomUnitChanged(value as CustomTimeUnit)}
+            items={CUSTOM_TIME_UNITS.map(unit => ({
+              value: unit,
+              label: unitLabel(unit),
+              inputDataTestId: `input-custom-time-${unit}` as const,
+              labelDataTestId: `label-custom-time-${unit}` as const,
+              disabled,
+            }))}
+          />
+        </StyledCustomTimeInputs>
+      ) : null}
     </>
   );
 };
