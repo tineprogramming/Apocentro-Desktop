@@ -216,7 +216,12 @@ export const ManageGroupAdminsDialog = (props: Props) => {
       $contentMinWidth={WrapperModalWidth.wide}
       $contentMaxWidth={WrapperModalWidth.wide}
       buttonChildren={
-        <ModalActionsContainer buttonType={SessionButtonType.Simple}>
+        // the default 300px cap clips "Transfer super admin"; let the row use the modal
+        <ModalActionsContainer
+          buttonType={SessionButtonType.Simple}
+          maxWidth="100%"
+          style={{ flexWrap: 'wrap' }}
+        >
           {canClaim ? (
             <SessionButton
               text={tr('claimSuperAdminDev')}
