@@ -106,7 +106,7 @@ export const devSimpleNoArgs = {
   // Apocentro group super admin
   manageAdminsDev: 'Manage admins',
   manageAdminsDescriptionDev:
-    'Admins cannot be demoted or removed from a group. Select a member to promote them, or an admin to hand over the super admin role or kick them.',
+    'Admins cannot be demoted or removed from a group. Use the Promote button next to a member to make them an admin, or select an admin below to hand the super admin role over to them or kick them.',
   superAdminYouDev: 'Super admin: You',
   superAdminIsDev: 'Super admin:',
   superAdminNoneDev: 'No super admin yet. Every admin of this group can remove members.',
@@ -116,9 +116,6 @@ export const devSimpleNoArgs = {
   transferSuperAdminDev: 'Transfer super admin',
   transferSuperAdminConfirmDev:
     'Hand the super admin role to this admin? You become a regular admin and lose the ability to remove members.',
-  promoteToAdminDev: 'Promote to admin',
-  promoteToAdminConfirmDev:
-    'Promote this member to admin? Admins can invite people, rename the group and manage its settings, and cannot be demoted.',
   kickAdminDev: 'Kick admin',
   kickAdminConfirmDev:
     'Kick this admin from the group? Admins cannot be removed from an existing group, so Apocentro will recreate it without them: a new group with the same name, picture, timer and members is created and everyone is re-invited, then the old group is deleted for all members. Message history is not carried over. This cannot be undone.',
