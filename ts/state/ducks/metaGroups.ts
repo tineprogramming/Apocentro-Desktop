@@ -1486,43 +1486,6 @@ const currentDeviceGroupSuperAdminChange = createAsyncThunk(
   }
 );
 
-/**
- * Apocentro: promote existing members to admin. The promotion itself is a 1o1 message
- * carrying the group's admin key, so it is scheduled as a job exactly like an invite.
- */
-const currentDeviceGroupPromoteMembers = createAsyncThunk(
-  'group/currentDeviceGroupPromoteMembers',
-  async (
-    {
-      groupPk,
-      members,
-    }: {
-      groupPk: GroupPubkeyType;
-      members: Array<PubkeyType>;
-    },
-    payloadCreator
-  ): Promise<GroupDetailsUpdate> => {
-    const state = payloadCreator.getState() as StateType;
-    if (!state.groups.infos[groupPk] || !state.groups.members[groupPk]) {
-      throw new PreConditionFailed(
-        'currentDeviceGroupPromoteMembers group not present in redux slice'
-      );
-    }
-    await checkWeAreAdminOrThrow(groupPk, 'currentDeviceGroupPromoteMembers');
-
-    for (let index = 0; index < members.length; index++) {
-      // eslint-disable-next-line no-await-in-loop
-      await GroupInvite.addJob({ groupPk, member: members[index], inviteAsAdmin: true });
-    }
-
-    return {
-      groupPk,
-      infos: await MetaGroupWrapperActions.infoGet(groupPk),
-      members: await MetaGroupWrapperActions.memberGetAll(groupPk),
-    };
-  }
-);
-
 const currentDeviceGroupAvatarChange = createAsyncThunk(
   'group/currentDeviceGroupAvatarChange',
   async (
@@ -1878,7 +1841,6 @@ export const groupInfoActions = {
   handleMemberLeftMessage,
   currentDeviceGroupNameChange,
   currentDeviceGroupSuperAdminChange,
-  currentDeviceGroupPromoteMembers,
   currentDeviceGroupAvatarChange,
   currentDeviceGroupAvatarRemoval,
   triggerDeleteMsgBeforeNow,

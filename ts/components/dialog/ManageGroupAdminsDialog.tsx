@@ -34,8 +34,8 @@ type Props = {
   conversationId: string;
 };
 
-/** claim/transfer are the same write; kick and promote are their own flows */
-type PendingAction = 'promote' | 'claim' | 'transfer' | 'kick';
+/** claim and transfer are the same write; kick is its own flow */
+type PendingAction = 'claim' | 'transfer' | 'kick';
 
 const StyledSectionLabel = styled.div`
   padding: var(--margins-xs) var(--margins-sm);
@@ -75,8 +75,6 @@ async function runAdminAction(action: () => Promise<unknown>): Promise<boolean> 
 
 function confirmTokenFor(pending: PendingAction) {
   switch (pending) {
-    case 'promote':
-      return 'promoteToAdminConfirmDev' as const;
     case 'claim':
       return 'claimSuperAdminConfirmDev' as const;
     case 'transfer':
@@ -89,8 +87,6 @@ function confirmTokenFor(pending: PendingAction) {
 
 function confirmButtonTokenFor(pending: PendingAction) {
   switch (pending) {
-    case 'promote':
-      return 'promoteToAdminDev' as const;
     case 'claim':
       return 'claimSuperAdminDev' as const;
     case 'transfer':
@@ -133,9 +129,8 @@ export const ManageGroupAdminsDialog = (props: Props) => {
   const selectedIsUs = selected === us;
 
   const canClaim = weAreAdmin && !superAdminId;
-  const canPromote = weAreAdmin && !!selected && !selectedIsAdmin;
-  const canTransfer = weAreSuperAdmin && selectedIsAdmin && !selectedIsUs;
-  const canKick = weAreSuperAdmin && selectedIsAdmin && !selectedIsUs;
+  // an admin other than ourselves has to be picked before either of these can run
+  const anAdminIsPicked = selectedIsAdmin && !selectedIsUs;
 
   const closeDialog = () => {
     dispatch(updateManageGroupAdminsModal(null));
@@ -150,17 +145,6 @@ export const ManageGroupAdminsDialog = (props: Props) => {
     setFailed(false);
 
     const ok = await runAdminAction(async () => {
-      if (pending === 'promote') {
-        await (
-          dispatch(
-            groupInfoActions.currentDeviceGroupPromoteMembers({
-              groupPk,
-              members: [selected as PubkeyType],
-            }) as any
-          ) as any
-        ).unwrap();
-        return;
-      }
       if (pending === 'claim' || pending === 'transfer') {
         await (
           dispatch(
@@ -242,33 +226,24 @@ export const ManageGroupAdminsDialog = (props: Props) => {
               dataTestId="claim-super-admin-button"
             />
           ) : null}
-          {canPromote ? (
-            <SessionButton
-              text={tr('promoteToAdminDev')}
-              buttonType={SessionButtonType.Simple}
-              disabled={isProcessingUIChange}
-              onClick={() => setPending('promote')}
-              dataTestId="promote-to-admin-button"
-            />
-          ) : null}
-          {canTransfer ? (
-            <SessionButton
-              text={tr('transferSuperAdminDev')}
-              buttonType={SessionButtonType.Simple}
-              disabled={isProcessingUIChange}
-              onClick={() => setPending('transfer')}
-              dataTestId="transfer-super-admin-button"
-            />
-          ) : null}
-          {canKick ? (
-            <SessionButton
-              text={tr('kickAdminDev')}
-              buttonType={SessionButtonType.Simple}
-              buttonColor={SessionButtonColor.Danger}
-              disabled={isProcessingUIChange}
-              onClick={() => setPending('kick')}
-              dataTestId="kick-admin-button"
-            />
+          {weAreSuperAdmin ? (
+            <>
+              <SessionButton
+                text={tr('transferSuperAdminDev')}
+                buttonType={SessionButtonType.Simple}
+                disabled={isProcessingUIChange || !anAdminIsPicked}
+                onClick={() => setPending('transfer')}
+                dataTestId="transfer-super-admin-button"
+              />
+              <SessionButton
+                text={tr('kickAdminDev')}
+                buttonType={SessionButtonType.Simple}
+                buttonColor={SessionButtonColor.Danger}
+                disabled={isProcessingUIChange || !anAdminIsPicked}
+                onClick={() => setPending('kick')}
+                dataTestId="kick-admin-button"
+              />
+            </>
           ) : null}
           <SessionButton
             text={tr('cancel')}
@@ -320,9 +295,7 @@ export const ManageGroupAdminsDialog = (props: Props) => {
             key={`member-${member.pubkeyHex}`}
             pubkey={member.pubkeyHex}
             isSelected={selected === member.pubkeyHex}
-            onSelect={() => setSelected(member.pubkeyHex)}
-            onUnselect={() => setSelected(null)}
-            hideRadioButton={!weAreAdmin}
+            hideRadioButton={true}
             disableBg={true}
             displayGroupStatus={true}
             groupPk={conversationId}
