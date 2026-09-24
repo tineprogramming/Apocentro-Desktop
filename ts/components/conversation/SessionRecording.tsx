@@ -313,6 +313,8 @@ function RecordingActions({
 
 export class SessionRecording extends Component<Props, State> {
   private recorder?: typeof MicRecorder;
+  /** Settles once the recorder's getUserMedia call has finished, successfully or not. */
+  private recorderStarted?: Promise<unknown>;
   private audioBlobMp3?: Blob;
   private audioElement?: HTMLAudioElement | null;
   private updateTimerInterval?: NodeJS.Timeout;
@@ -478,28 +480,45 @@ export class SessionRecording extends Component<Props, State> {
       bitRate: 128,
     });
     // eslint-disable-next-line more/no-then
-    this.recorder
-      .start()
-      .then(() => {
-        // something else
-      })
-      .catch((e: any) => {
-        window?.log?.error(e);
-      });
+    this.recorderStarted = this.recorder.start().catch((e: any) => {
+      window?.log?.error(e);
+    });
   }
 
   /**
    * Stops recording audio, sets recording state to stopped.
    */
   private async stopRecordingStream() {
-    if (!this.recorder) {
+    const recorder = this.recorder;
+    if (!recorder) {
       return;
     }
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
-    const [_, blob] = await this.recorder.stop().getMp3();
+    // Detach first so a second caller (unmount racing the stop button) is a no-op
     this.recorder = undefined;
 
-    this.audioBlobMp3 = blob;
+    // Apocentro: the recorder's stop() only releases the microphone once
+    // getUserMedia has resolved; before that it silently does nothing. Closing
+    // the recording view quickly (or leaving the conversation) used to let the
+    // stream arrive afterwards and keep the microphone open, with the MP3
+    // encoder running on the main thread, until the app was restarted.
+    await this.recorderStarted;
+    this.recorderStarted = undefined;
+    recorder.stop();
+    if (!recorder.processor && recorder.context && recorder.context.state !== 'closed') {
+      // start() failed (e.g. microphone permission denied): stop() skips the
+      // AudioContext cleanup in that case, so close it ourselves
+      void recorder.context.close();
+    }
+
+    try {
+      // eslint-disable-next-line @typescript-eslint/no-unused-vars
+      const [_, blob] = await recorder.getMp3();
+      this.audioBlobMp3 = blob;
+    } catch (e) {
+      // getMp3() rejects when nothing was recorded
+      window?.log?.info('SessionRecording: nothing was recorded', e);
+      this.audioBlobMp3 = undefined;
+    }
     this.updateAudioElementAndDuration();
 
     // Stop recording

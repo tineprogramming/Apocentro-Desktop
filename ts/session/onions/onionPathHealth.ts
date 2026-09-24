@@ -12,7 +12,16 @@
  * drop all paths and rebuild. From the second consecutive failed attempt it
  * also drops the guard nodes and refreshes the snode pool (seed fallback), so
  * we stop recycling dead cached nodes. Attempts back off exponentially (10s
- * doubling, capped at 5 min) and the escalation resets once we are green.
+ * doubling, capped at 5 min), each backoff is followed by a fresh grace
+ * period, and the escalation only resets once we have stayed green for
+ * STABLE_HEALTHY_RESET_MS (Android V5.6 / iOS 5d0ffcf20): a flapping
+ * connection that is briefly green after each forced rebuild must keep
+ * climbing towards a pool reseed instead of retrying attempt #1 forever.
+ *
+ * Desktop analogue of the iOS "grace expired while asleep" bug: timers stop
+ * while the computer sleeps, but Date.now() keeps moving. A tick gap much
+ * longer than CHECK_INTERVAL_MS means we slept, so the clocks restart instead
+ * of treating the whole sleep as unhealthy time.
  *
  * It also keeps a small event timeline and can render a diagnostics report for
  * the "Connection details" panel on the onion path dialog, so users can send
@@ -36,9 +45,15 @@ const POOL_RESEED_FROM_ATTEMPT = 2;
 const BACKOFF_BASE_MS = 10_000;
 const BACKOFF_MAX_MS = 5 * 60_000;
 const MAX_DEBUG_EVENTS = 40;
+// How long we must stay green before the escalation ladder resets
+const STABLE_HEALTHY_RESET_MS = 60_000;
+// A gap between ticks longer than this means the computer slept / the process was paused
+const SLEEP_GAP_MS = 3 * CHECK_INTERVAL_MS;
 
 let watchdogStarted = false;
 let unhealthySince: number | null = null;
+let healthySince: number | null = null;
+let lastTickAt: number | null = null;
 let recoveryAttempts = 0;
 let lastAttemptAt = 0;
 let reconnectInFlight = false;
@@ -120,6 +135,16 @@ export async function forceOnionReconnect(source: 'watchdog' | 'manual'): Promis
 }
 
 async function checkHealthTick(): Promise<void> {
+  const tickAt = Date.now();
+  if (lastTickAt !== null && tickAt - lastTickAt > SLEEP_GAP_MS) {
+    logDebugEvent(
+      `woke after ${Math.round((tickAt - lastTickAt) / 1000)}s pause, restarting clocks`
+    );
+    unhealthySince = null;
+    healthySince = null;
+  }
+  lastTickAt = tickAt;
+
   const healthy = isPathHealthy();
   if (healthy !== lastHealthy) {
     lastHealthy = healthy;
@@ -128,17 +153,31 @@ async function checkHealthTick(): Promise<void> {
       `status → ${healthy ? 'green' : 'not green'} (paths=${OnionPaths.onionPaths.length}, online=${isOnline()})`
     );
   }
+  const now = Date.now();
   if (healthy) {
     unhealthySince = null;
-    recoveryAttempts = 0;
+    if (healthySince === null) {
+      healthySince = now;
+    }
+    if (recoveryAttempts > 0 && now - healthySince >= STABLE_HEALTHY_RESET_MS) {
+      logDebugEvent(
+        `stable green for ${STABLE_HEALTHY_RESET_MS / 1000}s, reset after ${recoveryAttempts} attempt(s)`
+      );
+      recoveryAttempts = 0;
+    }
     return;
   }
+  healthySince = null;
   if (!isOnline()) {
     // Don't burn attempts while offline; the clock restarts when we're back
     unhealthySince = null;
     return;
   }
-  const now = Date.now();
+  if (recoveryAttempts > 0 && now - lastAttemptAt < backoffForAttempt(recoveryAttempts)) {
+    // Still backing off: the grace period only starts once the backoff is over
+    unhealthySince = null;
+    return;
+  }
   if (unhealthySince === null) {
     unhealthySince = now;
     return;
@@ -146,9 +185,8 @@ async function checkHealthTick(): Promise<void> {
   if (now - unhealthySince < UNHEALTHY_GRACE_MS) {
     return;
   }
-  if (recoveryAttempts > 0 && now - lastAttemptAt < backoffForAttempt(recoveryAttempts)) {
-    return;
-  }
+  logDebugEvent(`not green for ${Math.round((now - unhealthySince) / 1000)}s`);
+  unhealthySince = null;
   await forceOnionReconnect('watchdog');
 }
 
@@ -196,7 +234,9 @@ export async function buildOnionDebugReport(): Promise<string> {
   });
   lines.push(`guard nodes: ${guards.length}`);
   lines.push(`snode pool: ${poolSize === -1 ? 'unknown' : `${poolSize} nodes`}`);
-  lines.push(`recovery attempts since last green: ${recoveryAttempts}`);
+  lines.push(
+    `recovery attempts since last stable green (${STABLE_HEALTHY_RESET_MS / 1000}s): ${recoveryAttempts}`
+  );
   lines.push('recent events:');
   if (debugEvents.length === 0) {
     lines.push('  (none)');
